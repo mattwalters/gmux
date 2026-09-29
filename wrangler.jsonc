@@ -1,0 +1,9 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "gmux",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-24",
+	"kv_namespaces": [{ "binding": "OAUTH_KV" }, { "binding": "GMUX_KV" }],
+	"rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": true }],
+	"observability": { "enabled": true }
+}
