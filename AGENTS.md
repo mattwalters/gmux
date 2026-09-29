@@ -99,15 +99,17 @@ prompt or using it in a file operation. A shell expands it on its own; a
 subagent's Read/Edit/Write calls and a prompt placeholder don't.
 
 **Getting the pipeline.** `factory` is installed once per machine at
-user scope, not pinned by this repo. `.claude/settings.json` only
-declares the `mattwalters` marketplace (github `mattwalters/skills`).
-On a machine that does not have it installed yet, run:
+user scope. This repo declares no plugins and no marketplaces: there is
+no `.claude/settings.json`. On a machine that does not have it installed
+yet, run:
 
 ```
+claude plugin marketplace add mattwalters/skills
 claude plugin install factory@mattwalters --scope user
 ```
 
-Do not install it at project scope or add it to `enabledPlugins` here.
+Do not install it at project scope, and do not add `enabledPlugins` or
+`extraKnownMarketplaces` to this repo's settings.
 
 **Check command.** An implementer or fixer runs this and passes it
 before pushing:
