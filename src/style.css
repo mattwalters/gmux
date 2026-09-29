@@ -1,0 +1,155 @@
+/* gmux's one stylesheet. Hand-written, no build step: native nesting,
+   custom properties for colour and spacing, semantic selectors. */
+
+:root {
+	color-scheme: light dark;
+	--bg: #f7f7f5;
+	--surface: #ffffff;
+	--text: #1c1c1a;
+	--muted: #5f5f5a;
+	--border: #e3e3de;
+	--accent: #2f5bd3;
+	--ok: #1f7a4d;
+	--todo: #a15c00;
+	--code-bg: #efefeb;
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 1rem;
+	--space-4: 1.5rem;
+	--space-5: 2.5rem;
+	--radius: 10px;
+	--font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #161615;
+		--surface: #1f1f1d;
+		--text: #ecece8;
+		--muted: #a3a39c;
+		--border: #33332f;
+		--accent: #7fa2ff;
+		--ok: #5cc98f;
+		--todo: #f0a64a;
+		--code-bg: #2a2a27;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 16px / 1.55 var(--font);
+	-webkit-font-smoothing: antialiased;
+}
+
+header.site {
+	padding: var(--space-3) var(--space-4);
+	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+
+	.brand {
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		color: var(--text);
+		text-decoration: none;
+	}
+}
+
+main {
+	max-width: 40rem;
+	margin: 0 auto;
+	padding: var(--space-5) var(--space-4);
+}
+
+h1 {
+	margin: 0 0 var(--space-2);
+	font-size: 1.75rem;
+	letter-spacing: -0.02em;
+	line-height: 1.2;
+}
+
+h2 {
+	margin: 0 0 var(--space-1);
+	font-size: 1.05rem;
+}
+
+p {
+	margin: 0 0 var(--space-2);
+}
+
+.lede {
+	color: var(--muted);
+	margin-bottom: var(--space-4);
+}
+
+a {
+	color: var(--accent);
+}
+
+code {
+	font-family: var(--mono);
+	font-size: 0.875em;
+	background: var(--code-bg);
+	padding: 0.1em 0.35em;
+	border-radius: 4px;
+	overflow-wrap: anywhere;
+}
+
+pre {
+	margin: 0;
+	padding: var(--space-3);
+	overflow-x: auto;
+	background: var(--code-bg);
+	border-radius: 6px;
+
+	code {
+		padding: 0;
+		overflow-wrap: normal;
+	}
+}
+
+ol.steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--space-3);
+}
+
+.step {
+	display: grid;
+	grid-template-columns: 4.5rem minmax(0, 1fr);
+	gap: var(--space-3);
+	padding: var(--space-4);
+
+	@media (width < 32rem) {
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--space-2);
+		padding: var(--space-3);
+	}
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+
+	.status {
+		align-self: start;
+		justify-self: start;
+		padding: 0.1em 0.6em;
+		border-radius: 999px;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--todo);
+		border: 1px solid currentColor;
+	}
+
+	&.done .status {
+		color: var(--ok);
+	}
+}

@@ -1,0 +1,10 @@
+# Copy to .dev.vars (gitignored) for `wrangler dev`. A real deployment sets it
+# with `npx wrangler secret put TOKEN_ENCRYPTION_KEY` instead - see README.md.
+#
+# This is the only secret gmux needs. Everything else (the Google OAuth
+# client, the owner, connected accounts) is set up in the browser after
+# deploying and stored in KV. The Worker boots without this value too: the
+# setup page says it's missing, and nothing can store a token until it's set.
+
+# Standard base64 of 32 random bytes: `openssl rand -base64 32`.
+TOKEN_ENCRYPTION_KEY=replace-with-output-of-openssl-rand-base64-32
