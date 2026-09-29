@@ -6,8 +6,5 @@
 				"repo": "mattwalters/skills"
 			}
 		}
-	},
-	"enabledPlugins": {
-		"factory@mattwalters": true
 	}
 }

@@ -78,20 +78,43 @@ The `factory` pipeline (`orchestrate`, `implement-ticket`,
 `adversarial-review`, `merge-queue`, `decision-queue`) reads this section
 for its repo-specific configuration.
 
-- **Linear team key**: `GMX` (ticket ids are `GMX-<n>`).
-- **Check command**: `npm run check`, which runs typecheck (`tsc`), lint
-  (`biome check`) and tests (`vitest` in the Workers runtime). Run
-  `npm ci` first in a fresh worktree. CI runs the same command on every PR.
-- **Base branch**: `main`.
-- **Worktrees**: `$HOME/.local/state/factory/worktrees/gmux/`, one
-  detached worktree per ticket, named for the ticket. It sits outside the
-  repo so no `AGENTS.md`/`CLAUDE.md` above the checkout loads into a
-  ticket's run, and it's namespaced so no other adopting repo collides.
-- **Write window**: `none`. This is a side project, not work-hours code.
+| Field        | Value                                   |
+| ------------ | --------------------------------------- |
+| Linear team  | `GMX`                                   |
+| Base branch  | `main`                                  |
+| Worktrees    | `$HOME/ops/worktrees/mattwalters/gmux/` |
+| Write window | `none`                                  |
+
+Per-ticket worktrees are detached, one per ticket, named for the ticket.
+They live outside the repo so no `AGENTS.md`/`CLAUDE.md` above the checkout
+loads into a ticket's run, under the unattended orchestrate job's write root
+(`${OPS_WORKTREES:-$HOME/ops/worktrees}`), namespaced per repo so no other
+adopting repo collides.
 
 Expand `$HOME` to an absolute path before writing the worktrees value into a
 prompt or using it in a file operation. A shell expands it on its own; a
 subagent's Read/Edit/Write calls and a prompt placeholder don't.
+
+**Getting the pipeline.** `factory` is installed once per machine at
+user scope, not pinned by this repo. `.claude/settings.json` only
+declares the `mattwalters` marketplace (github `mattwalters/skills`).
+On a machine that does not have it installed yet, run:
+
+```
+claude plugin install factory@mattwalters --scope user
+```
+
+Do not install it at project scope or add it to `enabledPlugins` here.
+
+**Check command.** An implementer or fixer runs this and passes it
+before pushing:
+
+```
+npm ci && npm run check
+```
+
+`npm run check` runs typecheck (`tsc`), lint (`biome check`) and tests
+(`vitest` in the Workers runtime). CI runs the same command on every PR.
 
 ### Review invariants
 
