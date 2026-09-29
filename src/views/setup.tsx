@@ -1,5 +1,5 @@
 import type { SetupState } from "../config.js";
-import { Layout } from "./layout.js";
+import { Layout, type OwnerView } from "./layout.js";
 
 function Step(props: { done: boolean; title: string; children?: unknown }) {
 	return (
@@ -17,10 +17,10 @@ function Step(props: { done: boolean; title: string; children?: unknown }) {
  * What a fresh, unconfigured deploy serves instead of an error. The setup
  * wizard proper (GMX-3) replaces the Google client step's body.
  */
-export function SetupPage(props: { origin: string; state: SetupState }) {
+export function SetupPage(props: { owner: OwnerView; origin: string; state: SetupState }) {
 	const { origin, state } = props;
 	return (
-		<Layout title="Setup">
+		<Layout title="Setup" owner={props.owner}>
 			<h1>Finish setting up gmux</h1>
 			<p class="lede">
 				Your gmux is live at <code>{origin}</code>. A couple of things are left before it can reach your Google
@@ -49,31 +49,19 @@ export function SetupPage(props: { origin: string; state: SetupState }) {
 	);
 }
 
-/** Placeholder for the everyday dashboard (GMX-9), shown once setup is complete. */
-export function DashboardPage() {
+/** Placeholder for the everyday dashboard (GMX-9), shown to the signed-in owner once setup is complete. */
+export function DashboardPage(props: { owner: OwnerView; signOutCsrf: string }) {
 	return (
-		<Layout title="Dashboard">
+		<Layout title="Dashboard" owner={props.owner} signOutCsrf={props.signOutCsrf}>
 			<h1>gmux</h1>
 			<p class="lede">Setup is complete. Connected accounts will be listed here.</p>
 		</Layout>
 	);
 }
 
-/** /authorize, until Google sign-in (GMX-2) exists. Never completes an authorization. */
-export function SignInUnavailablePage() {
+export function NotFoundPage(props: { owner: OwnerView }) {
 	return (
-		<Layout title="Sign-in unavailable">
-			<h1>Sign-in isn't available yet</h1>
-			<p class="lede">
-				This gmux can't grant access to an MCP client yet, so nothing can connect to it. Nothing was shared.
-			</p>
-		</Layout>
-	);
-}
-
-export function NotFoundPage() {
-	return (
-		<Layout title="Not found">
+		<Layout title="Not found" owner={props.owner}>
 			<h1>Not found</h1>
 			<p class="lede">
 				There's nothing at this address. <a href="/">Go to gmux</a>.

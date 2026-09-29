@@ -40,13 +40,33 @@ redeploy.
 
 | Route | What it is |
 | -- | -- |
-| `GET /` | The admin UI. Shows the setup page until setup is complete. |
+| `GET /` | The admin UI. Shows the setup page until setup is complete, then the claim or sign-in page, then the dashboard. |
 | `GET /style.css` | The stylesheet. |
-| `GET/POST /authorize` | Connector sign-in. Until Google sign-in is built, it refuses everyone. |
+| `GET /signin`, `GET /signin/callback` | Google sign-in for the admin UI. The callback is the redirect URI to register with your Google OAuth client: `https://<your-worker>/signin/callback`. |
+| `POST /signout` | Ends the admin session. |
+| `GET/POST /authorize` | Connector sign-in: Google sign-in if needed, then a consent page. Only the owner's approval issues a connector token. |
 | `/token`, `/register`, `/.well-known/*` | The OAuth library's own endpoints. |
 | `/mcp` and below | The MCP server. Needs a valid connector token; without one it returns `401`. |
 
 The only MCP tool so far is `health_check`.
+
+## Who owns your gmux
+
+The first Google account to sign in becomes the owner. Nobody else can sign
+in or connect a client after that. The owner's email is shown at the top of
+every page, including to anyone who loads the Worker's public URL, so you can
+see at a glance whether someone else got in. A second account that signs in
+is told who owns it.
+
+The claim can't be undone from the UI. To change the owner, delete the
+`config:owner` key from the `GMUX_KV` namespace in the Cloudflare dashboard;
+every session and connector token stops working at once.
+
+Signing in to gmux asks Google for your email address only (`openid email`).
+That is a separate grant from the ones that connect your mailboxes.
+
+Until the setup wizard exists, put your Google OAuth client in `GMUX_KV` by
+hand under `config:google-client`, as `{"clientId": "...", "clientSecret": "..."}`.
 
 ## Develop
 

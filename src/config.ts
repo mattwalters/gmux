@@ -6,10 +6,11 @@
 
 import type { Env } from "./env.js";
 import { MisconfiguredError } from "./errors.js";
+import type { GoogleClient } from "./google.js";
 
 /**
- * GMUX_KV key the setup wizard (GMX-3) writes the Google OAuth client to.
- * Only its presence is read today.
+ * GMUX_KV key the setup wizard (GMX-3) writes the Google OAuth client to, as
+ * JSON `{clientId, clientSecret}`. Until then it's put there by hand.
  */
 export const GOOGLE_CLIENT_KEY = "config:google-client";
 
@@ -29,6 +30,23 @@ export function readEncryptionKey(env: Pick<Env, "TOKEN_ENCRYPTION_KEY">): strin
 	const key = env.TOKEN_ENCRYPTION_KEY?.trim();
 	if (!key || !decodesTo32Bytes(key)) throw new MisconfiguredError(["TOKEN_ENCRYPTION_KEY"]);
 	return key;
+}
+
+/** The Google OAuth client. Throws MisconfiguredError when it's missing or isn't `{clientId, clientSecret}`. */
+export async function readGoogleClient(env: Pick<Env, "GMUX_KV">): Promise<GoogleClient> {
+	const raw = await env.GMUX_KV.get(GOOGLE_CLIENT_KEY);
+	if (raw !== null) {
+		try {
+			const parsed = JSON.parse(raw) as Partial<GoogleClient> | null;
+			const { clientId, clientSecret } = parsed ?? {};
+			if (typeof clientId === "string" && clientId && typeof clientSecret === "string" && clientSecret) {
+				return { clientId, clientSecret };
+			}
+		} catch {
+			// falls through to the error below
+		}
+	}
+	throw new MisconfiguredError(["Google OAuth client"]);
 }
 
 export interface SetupState {
