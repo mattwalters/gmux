@@ -29,10 +29,11 @@ describe("boots unconfigured", () => {
 		expect(html).toContain("wrangler secret put TOKEN_ENCRYPTION_KEY");
 	});
 
-	it("serves the dashboard once setup is complete", async () => {
+	it("offers to claim the instance once setup is complete", async () => {
 		await testEnv.GMUX_KV.put(GOOGLE_CLIENT_KEY, "{}");
 		const html = await (await callWorker(get("/"))).text();
-		expect(html).toContain("Setup is complete");
+		expect(html).toContain("Sign in with Google to claim this gmux");
+		expect(html).toContain("Not yet claimed");
 		expect(html).not.toContain("Finish setting up gmux");
 	});
 
@@ -104,14 +105,5 @@ describe("the /mcp gate", () => {
 		const response = await callWorker(new Request("https://other.test/.well-known/oauth-protected-resource/mcp"));
 		const metadata = (await response.json()) as { resource: string };
 		expect(metadata.resource).toBe("https://other.test/mcp");
-	});
-});
-
-describe("/authorize fails closed until Google sign-in exists", () => {
-	it.each(["GET", "POST"])("%s never grants anything", async (method) => {
-		const response = await callWorker(get("/authorize?client_id=x&response_type=code", { method }));
-		expect(response.status).toBe(503);
-		expect(response.headers.get("Location")).toBeNull();
-		expect(await response.text()).toContain("<title>Sign-in unavailable");
 	});
 });

@@ -47,6 +47,9 @@ and a stranger's first impression.
 | `src/gate.ts` | The front door. `/mcp` is an OAuth-protected route (`@cloudflare/workers-oauth-provider`); everything else goes to `src/app.tsx`. |
 | `src/app.tsx`, `src/views/` | The admin UI and `/authorize`, as a Hono app. |
 | `src/mcp.ts` | The MCP tools, behind the gate. |
+| `src/signin.ts` | Google sign-in for the gate (`openid email` only): auth URL, PKCE, code exchange, id_token checks. |
+| `src/owner.ts` | The trust-on-first-use owner record. The only module that touches `config:owner`. |
+| `src/session.ts` | KV-backed admin sessions and their CSRF tokens. |
 | `src/config.ts` | Fail-closed config: the encryption key, and what's been set up so far. |
 | `src/errors.ts` | The three error classes and how each is described. |
 | `src/token-store.ts` | Encrypted refresh tokens in `GMUX_KV`. |

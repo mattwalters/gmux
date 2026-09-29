@@ -1,5 +1,5 @@
 // Calls src/mcp.ts directly, behind the gate: test/routes.test.ts covers the
-// gate itself, and no token can be minted until Google sign-in exists.
+// gate itself, and test/signin.test.ts covers minting a token.
 
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env.js";
