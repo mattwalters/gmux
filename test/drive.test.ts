@@ -186,6 +186,40 @@ describe("readFile", () => {
 		expect(fetchSpy.mock.calls.filter(([input]) => String(input).includes("alt=media"))).toHaveLength(0);
 	});
 
+	it("asks the Docs API for the document without pending suggestions", async () => {
+		let query: URLSearchParams | undefined;
+		google((url) => {
+			if (url.hostname !== "docs.googleapis.com") return meta(DOC);
+			query = url.searchParams;
+			return Response.json({ body: { content: [] } });
+		});
+		await read();
+		expect(query?.get("suggestionsViewMode")).toBe("PREVIEW_WITHOUT_SUGGESTIONS");
+	});
+
+	it.each([
+		["exportSizeLimitExceeded", "application/vnd.google-apps.spreadsheet", "/export"],
+		["exportSizeLimitExceeded", "application/vnd.google-apps.presentation", "/export"],
+		["cannotDownloadFile", "text/plain", "alt=media"],
+	])("reports a permanent %s refusal as metadata with no retry advice", async (reason, mimeType, marker) => {
+		google((url) => ((url.pathname + url.search).includes(marker) ? errorBody(403, reason) : meta(mimeType)));
+		const result = await read();
+		if (result.notFound) throw new Error("unexpected notFound");
+		expect(result.file.name).toBe("File");
+		expect(result.content.text).toBeNull();
+		expect(result.content.note).toContain(reason);
+		expect(result.content.note).toContain("Retrying won't help");
+	});
+
+	it("still maps other 403s on an export to the error classes", async () => {
+		google((url) =>
+			url.pathname.endsWith("/export")
+				? errorBody(403, "insufficientPermissions")
+				: meta("application/vnd.google-apps.spreadsheet"),
+		);
+		await expect(read()).rejects.toBeInstanceOf(ReauthRequiredError);
+	});
+
 	it("maps a Docs API that is switched off to misconfigured", async () => {
 		google((url) =>
 			url.hostname === "docs.googleapis.com" ? errorBody(403, "accessNotConfigured", "SERVICE_DISABLED") : meta(DOC),

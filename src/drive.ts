@@ -9,7 +9,7 @@ import { DRIVE_SCOPES, hasScopes } from "./accounts.js";
 import { docsToMarkdown } from "./docs-markdown.js";
 import type { Env } from "./env.js";
 import { UpstreamUnavailableError } from "./errors.js";
-import { apiError, type GoogleClient } from "./google.js";
+import { apiError, fileRefusal, type GoogleClient } from "./google.js";
 
 const DRIVE_ORIGIN = "https://www.googleapis.com";
 const DOCS_ORIGIN = "https://docs.googleapis.com";
@@ -83,6 +83,37 @@ async function call(accessToken: string, account: string, path: string, api: str
 	}
 	if (!response.ok) throw await apiError(account, response, api);
 	return response;
+}
+
+/**
+ * `call` for an export or download. A permanent per-file refusal from Google
+ * (too large to export, download-restricted) is Google's answer about that
+ * file, not an outage: it comes back as a FileContent saying so, with no retry
+ * advice. Every other failure is mapped as `call` does.
+ */
+async function callContent(
+	accessToken: string,
+	account: string,
+	path: string,
+	what: string,
+): Promise<Response | FileContent> {
+	let response: Response;
+	try {
+		response = await driveFetch(accessToken, path);
+	} catch (error) {
+		if (error instanceof Error && error.message.startsWith("gmux Drive code")) throw error;
+		throw new UpstreamUnavailableError(account);
+	}
+	if (response.ok) return response;
+	const refusal = await fileRefusal(response);
+	if (refusal) {
+		return {
+			text: null,
+			note: `Content not read: Google refused to ${what} this file (${refusal}). Retrying won't help. Metadata only.`,
+			truncated: false,
+		};
+	}
+	throw await apiError(account, response, DRIVE_API);
 }
 
 async function json(response: Response, account: string): Promise<Record<string, unknown>> {
@@ -205,18 +236,31 @@ async function readContent(accessToken: string, account: string, file: DriveFile
 	const type = file.mimeType;
 
 	if (type === DOC) {
-		const response = await call(accessToken, account, `${DOCS_PREFIX}${id}?includeTabsContent=true`, DOCS_API);
-		const text = docsToMarkdown(await json(response, account));
-		return capped(text, text === "" ? "The document is empty." : "Google Doc, rendered as markdown from the Docs API.");
-	}
-	const exportAs = type === SHEET ? "text/csv" : type === SLIDES ? "text/plain" : undefined;
-	if (exportAs) {
+		// Without this an editor gets suggestions inline, and the markdown would run
+		// suggested deletions and insertions together with no marking.
 		const response = await call(
 			accessToken,
 			account,
-			`${DRIVE_PREFIX}files/${id}/export?mimeType=${encodeURIComponent(exportAs)}`,
-			DRIVE_API,
+			`${DOCS_PREFIX}${id}?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS`,
+			DOCS_API,
 		);
+		const text = docsToMarkdown(await json(response, account));
+		return capped(
+			text,
+			text === ""
+				? "The document is empty."
+				: "Google Doc, rendered as markdown from the Docs API, without pending suggestions.",
+		);
+	}
+	const exportAs = type === SHEET ? "text/csv" : type === SLIDES ? "text/plain" : undefined;
+	if (exportAs) {
+		const response = await callContent(
+			accessToken,
+			account,
+			`${DRIVE_PREFIX}files/${id}/export?mimeType=${encodeURIComponent(exportAs)}`,
+			"export",
+		);
+		if (!(response instanceof Response)) return response;
 		const note =
 			type === SHEET
 				? "Google Sheet, exported as CSV: only the first sheet, as Google exports it."
@@ -231,12 +275,13 @@ async function readContent(accessToken: string, account: string, file: DriveFile
 				truncated: false,
 			};
 		}
-		const response = await call(
+		const response = await callContent(
 			accessToken,
 			account,
 			`${DRIVE_PREFIX}files/${id}?alt=media&supportsAllDrives=true`,
-			DRIVE_API,
+			"download",
 		);
+		if (!(response instanceof Response)) return response;
 		return capped(await response.text(), "Text file, read as stored.");
 	}
 	return {

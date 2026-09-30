@@ -102,6 +102,22 @@ function errorReasons(body: unknown): string[] {
 		.filter((reason): reason is string => typeof reason === "string");
 }
 
+const FILE_REFUSALS = ["exportSizeLimitExceeded", "cannotDownloadFile", "fileNotDownloadable", "cannotExportFile"];
+
+/**
+ * When a 403 is Google refusing one file's export or download for good (too
+ * large to export, download-restricted), that refusal's reason; otherwise
+ * undefined. Reads a clone, so apiError can still read the response.
+ */
+export async function fileRefusal(response: Response): Promise<string | undefined> {
+	if (response.status !== 403) return undefined;
+	try {
+		return errorReasons(await response.clone().json()).find((reason) => FILE_REFUSALS.includes(reason));
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * Maps a non-2xx response from a Google API (Drive, Docs; later Gmail) to one
  * of the three classes, for the caller to throw. `api` is the name shown when
