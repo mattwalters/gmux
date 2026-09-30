@@ -87,6 +87,10 @@ consent screen will say gmux can send email. gmux never sends; it only reads
 and writes drafts.** Leave every box on that screen ticked, or gmux refuses
 the account.
 
+Google's `gmail.compose` scope covers sending as well as drafts, so the grant
+could send; the Worker is what withholds it. No code path calls
+`messages.send` or `drafts.send`, and a test fails if one appears.
+
 A Google OAuth client left in "Testing" expires refresh tokens after seven
 days, so every account will turn to Needs reconnecting weekly until you
 publish the consent screen.

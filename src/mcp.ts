@@ -3,7 +3,8 @@
 //
 // gmux is the hands, not the brain (AGENTS.md): tools reach Google and
 // report accurately; they never summarise, digest or decide. The tools so
-// far are a health check and list_accounts.
+// far are a health check and list_accounts. Mail requests go through
+// gmailFetch (src/gmail.ts), which refuses the send endpoints (GMX-4).
 
 import { type CallToolResult, createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
