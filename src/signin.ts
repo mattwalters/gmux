@@ -86,18 +86,18 @@ function decodePayload(idToken: string): Record<string, unknown> | null {
 }
 
 /**
- * Exchanges the code for an id_token and checks its claims. Returns null when
- * the sign-in itself is bad (a rejected code, or claims that don't check
- * out); throws MisconfiguredError or UpstreamUnavailableError for the rest.
- * The id_token comes straight from Google over TLS, so its signature isn't
- * verified (OIDC core 3.1.3.7). Google's access token is never read.
+ * Exchanges an authorization code at Google's token endpoint. Returns the
+ * response body, or null when Google rejects the code (invalid_grant); throws
+ * MisconfiguredError or UpstreamUnavailableError for the rest. `label` names
+ * the grant in those errors. Shared with src/connect.ts.
  */
-export async function verifyCallback(
+export async function exchangeCode(
 	origin: string,
 	client: GoogleClient,
-	pending: PendingSignIn,
+	codeVerifier: string,
 	code: string,
-): Promise<Identity | null> {
+	label: string = LABEL,
+): Promise<Record<string, unknown> | null> {
 	let response: Response;
 	try {
 		response = await fetch(GOOGLE_TOKEN_URL, {
@@ -106,14 +106,14 @@ export async function verifyCallback(
 			body: new URLSearchParams({
 				grant_type: "authorization_code",
 				code,
-				code_verifier: pending.codeVerifier,
+				code_verifier: codeVerifier,
 				redirect_uri: googleRedirectUri(origin),
 				client_id: client.clientId,
 				client_secret: client.clientSecret,
 			}),
 		});
 	} catch {
-		throw new UpstreamUnavailableError(LABEL);
+		throw new UpstreamUnavailableError(label);
 	}
 
 	let body: Record<string, unknown> | null = null;
@@ -130,21 +130,43 @@ export async function verifyCallback(
 			throw new MisconfiguredError(["Google OAuth client"], `Google rejected it (${errorCode})`);
 		}
 		if (errorCode === "invalid_grant") return null;
-		if (response.status === 429) throw new UpstreamUnavailableError(LABEL, "rate_limited");
-		throw new UpstreamUnavailableError(LABEL, "outage", errorCode ?? `HTTP ${response.status}`);
+		if (response.status === 429) throw new UpstreamUnavailableError(label, "rate_limited");
+		throw new UpstreamUnavailableError(label, "outage", errorCode ?? `HTTP ${response.status}`);
 	}
+	if (!body) throw new UpstreamUnavailableError(label);
+	return body;
+}
 
-	const idToken = body?.id_token;
-	if (typeof idToken !== "string" || idToken.length === 0) throw new UpstreamUnavailableError(LABEL);
-
+/** Checks an id_token's claims against this client and nonce. Null if any check fails. Shared with src/connect.ts. */
+export function identityFromIdToken(idToken: string, client: GoogleClient, nonce: string): Identity | null {
 	const claims = decodePayload(idToken);
 	if (!claims) return null;
-	const { iss, aud, exp, nonce, email_verified: verified, sub, email } = claims;
+	const { iss, aud, exp, nonce: claimedNonce, email_verified: verified, sub, email } = claims;
 	if (typeof iss !== "string" || !ISSUERS.includes(iss)) return null;
 	if (aud !== client.clientId) return null;
 	if (typeof exp !== "number" || exp * 1000 <= Date.now()) return null;
-	if (nonce !== pending.nonce) return null;
+	if (claimedNonce !== nonce) return null;
 	if (verified !== true) return null;
 	if (typeof sub !== "string" || !sub || typeof email !== "string" || !email) return null;
 	return { sub, email };
+}
+
+/**
+ * Exchanges the code for an id_token and checks its claims. Returns null when
+ * the sign-in itself is bad (a rejected code, or claims that don't check
+ * out); throws MisconfiguredError or UpstreamUnavailableError for the rest.
+ * The id_token comes straight from Google over TLS, so its signature isn't
+ * verified (OIDC core 3.1.3.7). Google's access token is never read.
+ */
+export async function verifyCallback(
+	origin: string,
+	client: GoogleClient,
+	pending: PendingSignIn,
+	code: string,
+): Promise<Identity | null> {
+	const body = await exchangeCode(origin, client, pending.codeVerifier, code);
+	if (!body) return null;
+	const idToken = body.id_token;
+	if (typeof idToken !== "string" || idToken.length === 0) throw new UpstreamUnavailableError(LABEL);
+	return identityFromIdToken(idToken, client, pending.nonce);
 }

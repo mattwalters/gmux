@@ -11,9 +11,9 @@
 
 import type { CallToolResult } from "@modelcontextprotocol/server";
 
-export type ReauthReason = "not_connected" | "unreadable" | "revoked";
+export type ReauthReason = "not_connected" | "unreadable" | "revoked" | "missing_scopes";
 
-/** A missing, unreadable or revoked Google refresh token. Reconnecting the account fixes all three. */
+/** A missing, unreadable or revoked Google refresh token, or one lacking a scope gmux needs. Reconnecting fixes all four. */
 export class ReauthRequiredError extends Error {
 	constructor(
 		public readonly account: string,

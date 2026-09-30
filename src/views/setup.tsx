@@ -1,5 +1,4 @@
 import type { SetupState } from "../config.js";
-import { MCP_PATH } from "../gate.js";
 import { CloudConsoleSteps } from "./cloud-console.js";
 import { Layout, type OwnerView } from "./layout.js";
 
@@ -15,7 +14,7 @@ function Step(props: { done: boolean; title: string; children?: unknown }) {
 	);
 }
 
-function Copyable(props: { id: string; text: string }) {
+export function Copyable(props: { id: string; text: string }) {
 	return (
 		<p class="copyable">
 			<code id={props.id}>{props.text}</code>
@@ -120,35 +119,6 @@ export function SetupPage(props: {
 					)}
 				</Step>
 			</ol>
-		</Layout>
-	);
-}
-
-/**
- * Placeholder for the everyday dashboard (GMX-9), shown to the signed-in owner
- * once setup is complete. GMX-9 must keep the "Connect Claude" section: it's
- * where the connection string stays reachable.
- */
-export function DashboardPage(props: { owner: OwnerView; signOutCsrf: string; origin: string }) {
-	const mcpUrl = `${props.origin}${MCP_PATH}`;
-	return (
-		<Layout title="Dashboard" owner={props.owner} signOutCsrf={props.signOutCsrf}>
-			<h1>gmux</h1>
-			<p class="lede">Setup is complete. Connected accounts will be listed here.</p>
-			<section>
-				<h2>Connect Claude</h2>
-				<p>This is the connection string for this gmux:</p>
-				<Copyable id="mcp-url" text={mcpUrl} />
-				<ol>
-					<li>In Claude, open Settings, then Connectors, then Add custom connector.</li>
-					<li>Name it "gmux", paste the connection string, and add it.</li>
-					<li>Sign in with the Google account that owns this gmux, then approve on gmux's consent page.</li>
-				</ol>
-				<p>In Claude Code, run this instead:</p>
-				<pre>
-					<code>{`claude mcp add --transport http gmux ${mcpUrl}`}</code>
-				</pre>
-			</section>
 		</Layout>
 	);
 }

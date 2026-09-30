@@ -47,6 +47,7 @@ redeploy.
 | `GET /style.css`, `GET /copy.js` | The stylesheet, and the small script behind the copy buttons. |
 | `GET /signin`, `GET /signin/callback` | Google sign-in for the admin UI. The callback is the redirect URI to register with your Google OAuth client; the setup page shows it. |
 | `POST /signout` | Ends the admin session. |
+| `POST /accounts/connect`, `/accounts/rename`, `/accounts/remove` | Connect a Google account's mail (or reconnect one), relabel it, or forget it. Owner session and CSRF token required. Connecting sends you to Google and back through `/signin/callback`. |
 | `GET/POST /authorize` | Connector sign-in: Google sign-in if needed, then a consent page. Only the owner's approval issues a connector token. |
 | `/token`, `/register`, `/.well-known/*` | The OAuth library's own endpoints. |
 | `/mcp` and below | The MCP server. Needs a valid connector token; without one it returns `401`. |
@@ -67,6 +68,25 @@ every session and connector token stops working at once.
 
 Signing in to gmux asks Google for your email address only (`openid email`).
 That is a separate grant from the ones that connect your mailboxes.
+
+## Connecting accounts
+
+The dashboard lists every connected Google account with its health:
+Connected, Needs reconnecting (the grant was revoked or expired) or Google
+didn't answer (try again). Use **Connect account** to add one, **Reconnect**
+to repair one, **Rename** to change its label (the email by default) and
+**Remove** to forget it. Removing deletes gmux's copy of the token; it
+doesn't revoke the grant at Google, which you do at
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+Connecting asks Google for `gmail.readonly` and `gmail.compose`. **Google's
+consent screen will say gmux can send email. gmux never sends; it only reads
+and writes drafts.** Leave every box on that screen ticked, or gmux refuses
+the account.
+
+A Google OAuth client left in "Testing" expires refresh tokens after seven
+days, so every account will turn to Needs reconnecting weekly until you
+publish the consent screen.
 
 ## Develop
 

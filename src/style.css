@@ -11,6 +11,7 @@
 	--accent: #2f5bd3;
 	--ok: #1f7a4d;
 	--todo: #a15c00;
+	--bad: #b3261e;
 	--code-bg: #efefeb;
 	--space-1: 0.25rem;
 	--space-2: 0.5rem;
@@ -32,6 +33,7 @@
 		--accent: #7fa2ff;
 		--ok: #5cc98f;
 		--todo: #f0a64a;
+		--bad: #ff8a80;
 		--code-bg: #2a2a27;
 	}
 }
@@ -172,7 +174,7 @@ h3 {
 }
 
 main {
-	max-width: 40rem;
+	max-width: 46rem;
 	margin: 0 auto;
 	padding: var(--space-5) var(--space-4);
 }
@@ -261,5 +263,122 @@ ol.steps {
 
 	&.done .status {
 		color: var(--ok);
+	}
+}
+
+.notice {
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--ok);
+	border-radius: 6px;
+	color: var(--ok);
+}
+
+.button.small {
+	padding: var(--space-1) var(--space-3);
+	font-size: 0.875rem;
+}
+
+section {
+	margin-bottom: var(--space-5);
+}
+
+ul.accounts {
+	list-style: none;
+	margin: 0 0 var(--space-3);
+	padding: 0;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+.account {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: var(--space-1) var(--space-3);
+	padding: var(--space-2) var(--space-3);
+
+	& + & {
+		border-top: 1px solid var(--border);
+	}
+
+	.identity {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 var(--space-2);
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.email {
+		color: var(--muted);
+		font-size: 0.875rem;
+	}
+
+	.pill {
+		padding: 0.1em 0.6em;
+		border: 1px solid currentColor;
+		border-radius: 999px;
+		color: var(--ok);
+		font-size: 0.8rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	&[data-state="reauth_required"] .pill {
+		color: var(--bad);
+	}
+
+	&[data-state="upstream_unavailable"] .pill,
+	&[data-state="misconfigured"] .pill {
+		color: var(--todo);
+	}
+
+	.row-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+
+		form {
+			margin: 0;
+		}
+	}
+
+	.sentence,
+	.rename {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.875rem;
+	}
+
+	.rename summary {
+		cursor: pointer;
+		color: var(--accent);
+	}
+
+	form.inline {
+		display: flex;
+		gap: var(--space-2);
+		margin-top: var(--space-1);
+
+		input[type="text"] {
+			flex: 1;
+			padding: var(--space-1) var(--space-2);
+			border: 1px solid var(--border);
+			border-radius: 6px;
+			background: var(--bg);
+			color: var(--text);
+			font: inherit;
+		}
+	}
+
+	@media (width < 32rem) {
+		grid-template-columns: minmax(0, 1fr) auto;
+
+		.row-actions {
+			grid-column: 1 / -1;
+		}
 	}
 }
