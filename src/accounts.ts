@@ -120,6 +120,16 @@ export async function removeAccount(kv: KVNamespace, email: string): Promise<voi
 export type AccountHealth = { state: "ok" } | { state: ErrorCode; sentence: string };
 
 /**
+ * Refreshes the account's grant and checks it still carries every mail scope.
+ * Throws one of the error classes when it doesn't work; the access token never
+ * leaves this function.
+ */
+export async function checkAccount(env: Env, client: GoogleClient, email: string): Promise<void> {
+	const { scopes } = await getAccessToken(env, client, email);
+	if (!MAIL_SCOPES.every((scope) => scopes.includes(scope))) throw new ReauthRequiredError(email, "missing_scopes");
+}
+
+/**
  * Whether the account's grant still works right now, by refreshing it. A
  * grant that no longer carries every mail scope counts as needing a
  * reconnect. Anything that isn't one of the three error classes is a bug and
@@ -127,8 +137,7 @@ export type AccountHealth = { state: "ok" } | { state: ErrorCode; sentence: stri
  */
 export async function accountHealth(env: Env, client: GoogleClient, email: string): Promise<AccountHealth> {
 	try {
-		const { scopes } = await getAccessToken(env, client, email);
-		if (!MAIL_SCOPES.every((scope) => scopes.includes(scope))) throw new ReauthRequiredError(email, "missing_scopes");
+		await checkAccount(env, client, email);
 		return { state: "ok" };
 	} catch (error) {
 		const described = describeError(error);

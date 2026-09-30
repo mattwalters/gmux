@@ -1,5 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { MAIL_SCOPES, saveAccount } from "../src/accounts.js";
 import worker, { type Env } from "../src/index.js";
+import { writeRefreshToken } from "../src/token-store.js";
 
 export const BASE_URL = "https://gmux.test";
 
@@ -51,6 +53,18 @@ export async function resetKv(): Promise<void> {
 
 export async function seedGoogleClient(): Promise<void> {
 	await testEnv.GMUX_KV.put("config:google-client", JSON.stringify(GOOGLE_CLIENT));
+}
+
+/** A connected account: a stored refresh token plus its registry record. */
+export async function seedAccount(email: string, refreshToken: string, scopes: string[] = [...MAIL_SCOPES]) {
+	const connectedAt = "2026-01-01T00:00:00.000Z";
+	await writeRefreshToken(testEnv.GMUX_KV, testEnv.TOKEN_ENCRYPTION_KEY as string, email, {
+		refreshToken,
+		email,
+		scopes,
+		connectedAt,
+	});
+	await saveAccount(testEnv.GMUX_KV, { email, sub: email, connectedAt });
 }
 
 function base64url(text: string): string {
