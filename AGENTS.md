@@ -115,8 +115,10 @@ Do not install it at project scope, and do not add `enabledPlugins` or
 before pushing:
 
 ```
-npm ci && npm run check
+./scripts/check.sh
 ```
+
+It runs `npm ci && npm run check`.
 
 `npm run check` runs typecheck (`tsc`), lint (`biome check`) and tests
 (`vitest` in the Workers runtime). CI runs the same command on every PR.
