@@ -13,6 +13,7 @@ import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { accountHealth, getAccount, listAccounts, normalizeEmail, removeAccount, renameAccount } from "./accounts.js";
 import {
 	isClientId,
 	isConfigured,
@@ -21,6 +22,7 @@ import {
 	readSetupState,
 	writeGoogleClient,
 } from "./config.js";
+import { finishConnect, startConnect, takeConnect } from "./connect.js";
 import type { Env } from "./env.js";
 import { describeError } from "./errors.js";
 import { MCP_SCOPE } from "./gate.js";
@@ -38,11 +40,13 @@ import {
 import { googleRedirectUri, startSignIn, takePending, verifyCallback } from "./signin.js";
 import styles from "./style.css";
 import { COPY_SCRIPT } from "./views/copy-script.js";
-import { DashboardPage, NotFoundPage, SetupPage, SetupRefusedPage } from "./views/setup.js";
+import { type AccountRow, DashboardPage } from "./views/dashboard.js";
+import { NotFoundPage, SetupPage, SetupRefusedPage } from "./views/setup.js";
 import {
 	BadConnectorRequestPage,
 	ClaimedPage,
 	ClaimPage,
+	ConnectFailedPage,
 	ConsentPage,
 	ErrorPage,
 	FinishSetupPage,
@@ -143,7 +147,32 @@ app.get("/", async (c) => {
 	if (!owner) return c.html(<ClaimPage owner={owner} />);
 	const session = await currentSession(c);
 	if (!session) return c.html(<SignInPage owner={owner} />);
-	return c.html(<DashboardPage owner={owner} signOutCsrf={session.csrf} origin={new URL(c.req.url).origin} />);
+	const client = await readGoogleClient(c.env);
+
+	const rows: AccountRow[] = await Promise.all(
+		(await listAccounts(c.env.GMUX_KV)).map(async (account) => ({
+			account,
+			health: await accountHealth(c.env, client, account.email),
+		})),
+	);
+	// A misconfigured deployment fails every row the same way: say it once.
+	const misconfigured = rows.find((row) => row.health.state === "misconfigured")?.health;
+	const query = new URL(c.req.url).searchParams;
+	const connected = query.get("connected");
+
+	// "Connect account" posts here and is redirected on to Google; form-action
+	// covers that redirect too.
+	c.header(CSP_HEADER, csp("'self' https://accounts.google.com"));
+	return c.html(
+		<DashboardPage
+			owner={owner}
+			signOutCsrf={session.csrf}
+			origin={new URL(c.req.url).origin}
+			rows={rows}
+			banner={misconfigured && misconfigured.state !== "ok" ? misconfigured.sentence : undefined}
+			connected={connected ? { email: connected, expectedEmail: query.get("expected") ?? undefined } : undefined}
+		/>,
+	);
 });
 
 // The setup wizard, until somebody claims the instance. Editing the client
@@ -205,6 +234,47 @@ app.get("/signin/callback", async (c) => {
 	if (!client) return c.html(<FinishSetupPage owner={owner} />, 503);
 
 	const params = new URL(c.req.url).searchParams;
+
+	// A mailbox connect has its own pending state. Anything else is a sign-in.
+	const connect = await takeConnect(c.env.GMUX_KV, params.get("state"));
+	if (connect) {
+		const session = await currentSession(c);
+		if (!session || session.sub !== connect.sub) return c.html(<SignInFailedPage owner={owner} />, 403);
+		if (params.get("error") === "access_denied") {
+			return c.html(
+				<ConnectFailedPage owner={owner}>You cancelled at Google. Nothing was connected.</ConnectFailedPage>,
+			);
+		}
+		const code = params.get("code");
+		if (params.has("error") || !code) {
+			return c.html(
+				<ConnectFailedPage owner={owner}>Google didn't complete the connection. Try again.</ConnectFailedPage>,
+				400,
+			);
+		}
+		const result = await finishConnect(c.env, new URL(c.req.url).origin, client, connect, code);
+		if (result.kind === "connected") {
+			const query = new URLSearchParams({ connected: result.email });
+			if (result.expectedEmail) query.set("expected", result.expectedEmail);
+			return c.redirect(`/?${query}`);
+		}
+		if (result.kind === "missing_scopes") {
+			return c.html(
+				<ConnectFailedPage owner={owner}>
+					Google's consent screen has a checkbox for each permission, and one gmux needs wasn't ticked, so nothing was
+					connected. Try again and leave every box ticked.
+				</ConnectFailedPage>,
+				400,
+			);
+		}
+		return c.html(
+			<ConnectFailedPage owner={owner}>
+				That connection couldn't be completed, so nothing was connected. Try again.
+			</ConnectFailedPage>,
+			400,
+		);
+	}
+
 	const pending = await takePending(c.env.GMUX_KV, params.get("state"));
 	if (!pending) return c.html(<SignInFailedPage owner={owner} />, 400);
 	if (params.get("error") === "access_denied") return c.html(<SignInCancelledPage owner={owner} />);
@@ -274,6 +344,57 @@ app.post("/authorize", async (c) => {
 		props: { sub: session.sub, email: session.email },
 	});
 	return c.redirect(redirectTo);
+});
+
+/** The owner's session and the form it posted, or null unless both are valid and the CSRF token matches. */
+async function ownerForm(c: AppContext): Promise<{ session: Session; form: FormData } | null> {
+	const session = await currentSession(c);
+	const form = await c.req.formData().catch(() => new FormData());
+	const csrf = form.get("csrf");
+	if (!session || typeof csrf !== "string" || csrf !== session.csrf) return null;
+	return { session, form };
+}
+
+function formEmail(form: FormData): string {
+	const email = form.get("email");
+	return typeof email === "string" ? normalizeEmail(email) : "";
+}
+
+app.post("/accounts/connect", async (c) => {
+	const posted = await ownerForm(c);
+	if (!posted) return c.html(<SignInFailedPage owner={c.get("owner")} />, 403);
+	const client = await googleClientIfConfigured(c);
+	if (!client) return c.html(<FinishSetupPage owner={c.get("owner")} />, 503);
+	// Only an account that's on the list can be the one being reconnected.
+	const email = formEmail(posted.form);
+	const reconnect = email && (await getAccount(c.env.GMUX_KV, email)) ? email : undefined;
+	return c.redirect(
+		await startConnect(c.env.GMUX_KV, new URL(c.req.url).origin, client, posted.session, reconnect),
+		303,
+	);
+});
+
+app.post("/accounts/rename", async (c) => {
+	const posted = await ownerForm(c);
+	if (!posted) return c.html(<SignInFailedPage owner={c.get("owner")} />, 403);
+	const label = posted.form.get("label");
+	const result = await renameAccount(c.env.GMUX_KV, formEmail(posted.form), typeof label === "string" ? label : "");
+	if (result === "not_found") return c.html(<NotFoundPage owner={c.get("owner")} />, 404);
+	if (result === "invalid") {
+		return c.html(
+			<SetupRefusedPage owner={c.get("owner")}>A label can be 64 characters at most.</SetupRefusedPage>,
+			400,
+		);
+	}
+	return c.redirect("/", 303);
+});
+
+app.post("/accounts/remove", async (c) => {
+	const posted = await ownerForm(c);
+	if (!posted) return c.html(<SignInFailedPage owner={c.get("owner")} />, 403);
+	const email = formEmail(posted.form);
+	if (email) await removeAccount(c.env.GMUX_KV, email);
+	return c.redirect("/", 303);
 });
 
 app.post("/signout", async (c) => {

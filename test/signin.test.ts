@@ -100,10 +100,10 @@ describe("/signin/callback", () => {
 	it("shows the dashboard to that session, and the sign-in page without it", async () => {
 		const cookie = await signInAs();
 		const signedIn = await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text();
-		expect(signedIn).toContain("Setup is complete");
+		expect(signedIn).toContain("Connect account");
 		const anonymous = await (await callWorker(get("/"))).text();
 		expect(anonymous).toContain("Sign in with Google");
-		expect(anonymous).not.toContain("Setup is complete");
+		expect(anonymous).not.toContain("Connect account");
 	});
 
 	it("tells a second account who owns the instance, and changes nothing", async () => {
@@ -216,7 +216,7 @@ describe("signing out", () => {
 		await callWorker(
 			get("/signout", { method: "POST", headers: { Cookie: cookie }, body: new URLSearchParams({ csrf: "wrong" }) }),
 		);
-		expect(await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text()).toContain("Setup is complete");
+		expect(await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text()).toContain("Connect account");
 
 		const html = await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text();
 		const csrf = /name="csrf" value="([^"]+)"/.exec(html)?.[1] as string;
@@ -224,9 +224,7 @@ describe("signing out", () => {
 			get("/signout", { method: "POST", headers: { Cookie: cookie }, body: new URLSearchParams({ csrf }) }),
 		);
 		expect(response.status).toBe(302);
-		expect(await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text()).not.toContain(
-			"Setup is complete",
-		);
+		expect(await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text()).not.toContain("Connect account");
 	});
 });
 
@@ -349,9 +347,7 @@ describe("connecting an MCP client", () => {
 		// Changing the owner in the dashboard revokes the token and the session.
 		await testEnv.GMUX_KV.put(OWNER_KEY, JSON.stringify({ sub: "9999", email: "new@example.com", claimedAt: "" }));
 		expect((await tools()).status).toBe(401);
-		expect(await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text()).not.toContain(
-			"Setup is complete",
-		);
+		expect(await (await callWorker(get("/", { headers: { Cookie: cookie } }))).text()).not.toContain("Connect account");
 		await testEnv.GMUX_KV.delete(OWNER_KEY);
 		expect((await tools()).status).toBe(401);
 	});

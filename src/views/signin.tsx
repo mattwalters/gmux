@@ -80,6 +80,15 @@ export function SignInFailedPage(props: { owner: OwnerView }) {
 	);
 }
 
+/** A mailbox connect that stored nothing. `children` says why and what to do. */
+export function ConnectFailedPage(props: { owner: OwnerView; children: string }) {
+	return (
+		<Notice owner={props.owner} title="Account not connected">
+			{props.children}
+		</Notice>
+	);
+}
+
 /** /authorize was called with something the OAuth library refused. */
 export function BadConnectorRequestPage(props: { owner: OwnerView }) {
 	return (
