@@ -49,7 +49,7 @@ export function assertNotSend(url: string | URL): void {
 	} catch {
 		throw new Error("gmux never sends: refused a request to an unparseable URL");
 	}
-	if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase()) || looksLikeSend(parsed)) {
+	if (parsed.protocol !== "https:" || !ALLOWED_HOSTS.has(parsed.hostname.toLowerCase()) || looksLikeSend(parsed)) {
 		throw new Error(`gmux never sends: refused request to ${parsed.hostname}${parsed.pathname}`);
 	}
 }

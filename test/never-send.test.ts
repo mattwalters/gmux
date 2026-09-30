@@ -77,6 +77,10 @@ describe("the send guard", () => {
 		expect(() => assertNotSend(url)).toThrow("gmux never sends");
 	});
 
+	it("refuses cleartext http to Gmail", () => {
+		expect(() => assertNotSend("http://gmail.googleapis.com/gmail/v1/users/me/messages")).toThrow("gmux never sends");
+	});
+
 	it.each(ALLOWED_PATHS)("allows %s", async (path) => {
 		expect(looksLikeSend(`${G}${path}`)).toBe(false);
 		expect(() => assertNotSend(`${G}${path}`)).not.toThrow();
@@ -195,7 +199,7 @@ const sources = import.meta.glob<string>("../src/**/*.{ts,tsx}", {
 
 describe("the source", () => {
 	const SEND_SPELLINGS = ["messages/send", "drafts/send", "messages:send", "drafts:send"];
-	const GMAIL_HOSTS = ["gmail.googleapis.com", "googleapis.com/gmail"];
+	const GMAIL_HOSTS = ["gmail.googleapis.com", "googleapis.com/gmail", "gmail_api"];
 	const GMAIL_SRC = "../src/gmail.ts";
 	const others = Object.entries(sources).filter(([path]) => path !== GMAIL_SRC);
 
