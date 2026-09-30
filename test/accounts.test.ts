@@ -4,6 +4,7 @@ import {
 	getAccount,
 	listAccounts,
 	MAIL_SCOPES,
+	REQUIRED_SCOPES,
 	removeAccount,
 	renameAccount,
 	saveAccount,
@@ -24,7 +25,7 @@ afterEach(async () => {
 	await resetKv();
 });
 
-function connect(email: string, scopes: string[] = [...MAIL_SCOPES]) {
+function connect(email: string, scopes: string[] = [...REQUIRED_SCOPES]) {
 	return writeRefreshToken(KV, KEY, email, { refreshToken: "1//refresh", email, scopes, connectedAt: WHEN });
 }
 
@@ -123,6 +124,12 @@ describe("accountHealth", () => {
 	it("maps a grant missing a mail scope to reauth", async () => {
 		await connect("a@example.com");
 		tokenEndpoint(200, { access_token: "ya29.x", scope: MAIL_SCOPES[0] });
+		expect(await health()).toMatchObject({ state: "reauth_required" });
+	});
+
+	it("maps a mail-only grant, from before Drive, to reauth", async () => {
+		await connect("a@example.com", [...MAIL_SCOPES]);
+		tokenEndpoint(200, { access_token: "ya29.x", scope: MAIL_SCOPES.join(" ") });
 		expect(await health()).toMatchObject({ state: "reauth_required" });
 	});
 

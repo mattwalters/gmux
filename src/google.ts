@@ -1,6 +1,7 @@
 // Access tokens on demand, and the one place a Google token-endpoint response
 // is mapped to src/errors.ts's three classes - the same mapping ops-mail
-// uses. No caching: a refresh is one fast call.
+// uses. apiError does the same for the Google APIs' own error responses.
+// No caching: a refresh is one fast call.
 
 import { readEncryptionKey } from "./config.js";
 import type { Env } from "./env.js";
@@ -88,4 +89,50 @@ export async function getAccessToken(env: Env, client: GoogleClient, account: st
 	}
 
 	return { accessToken, scopes };
+}
+
+/** The `reason` strings in a Google API error body: `error.errors[].reason` and `error.details[].reason`. */
+function errorReasons(body: unknown): string[] {
+	const error = (body as { error?: unknown } | null)?.error;
+	if (typeof error !== "object" || error === null) return [];
+	const { errors, details } = error as { errors?: unknown; details?: unknown };
+	return [errors, details]
+		.flatMap((list) => (Array.isArray(list) ? list : []))
+		.map((item) => (item as { reason?: unknown } | null)?.reason)
+		.filter((reason): reason is string => typeof reason === "string");
+}
+
+/**
+ * Maps a non-2xx response from a Google API (Drive, Docs; later Gmail) to one
+ * of the three classes, for the caller to throw. `api` is the name shown when
+ * the API isn't enabled in the deployer's Cloud project. Never echoes a token.
+ *
+ * - 401 -> ReauthRequiredError "revoked"
+ * - 403 insufficientPermissions or ACCESS_TOKEN_SCOPE_INSUFFICIENT -> ReauthRequiredError "missing_scopes"
+ * - 403 accessNotConfigured or SERVICE_DISABLED -> MisconfiguredError([api])
+ * - 429, or 403 rateLimitExceeded or userRateLimitExceeded -> UpstreamUnavailableError "rate_limited"
+ * - anything else -> UpstreamUnavailableError "outage", with Google's reason or the status as detail
+ */
+export async function apiError(account: string, response: Response, api: string): Promise<Error> {
+	let body: unknown = null;
+	try {
+		body = await response.json();
+	} catch {
+		body = null;
+	}
+	const reasons = errorReasons(body);
+	const has = (...names: string[]) => reasons.some((reason) => names.includes(reason));
+
+	if (response.status === 401) return new ReauthRequiredError(account, "revoked");
+	if (response.status === 403) {
+		if (has("insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
+			return new ReauthRequiredError(account, "missing_scopes");
+		}
+		if (has("accessNotConfigured", "SERVICE_DISABLED")) {
+			return new MisconfiguredError([api], "enable it in your Google Cloud project");
+		}
+		if (has("rateLimitExceeded", "userRateLimitExceeded")) return new UpstreamUnavailableError(account, "rate_limited");
+	}
+	if (response.status === 429) return new UpstreamUnavailableError(account, "rate_limited");
+	return new UpstreamUnavailableError(account, "outage", reasons[0] ?? `HTTP ${response.status}`);
 }

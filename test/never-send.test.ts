@@ -5,7 +5,7 @@
 // Gmail or spells a send endpoint.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAIL_SCOPES } from "../src/accounts.js";
+import { MAIL_SCOPES, REQUIRED_SCOPES } from "../src/accounts.js";
 import { assertNotSend, gmailFetch, looksLikeSend } from "../src/gmail.js";
 import mcp from "../src/mcp.js";
 import { claimOwnerIfUnclaimed } from "../src/owner.js";
@@ -111,6 +111,8 @@ describe("the scopes", () => {
 const TOOL_ARGS: Record<string, Record<string, unknown>> = {
 	health_check: {},
 	list_accounts: {},
+	drive_search: { query: "budget" },
+	drive_read_file: { account: "work@example.com", file_id: "file-1" },
 };
 
 type McpReply = { result: { tools?: { name: string }[]; isError?: boolean; content?: { text?: string }[] } };
@@ -141,7 +143,7 @@ describe("every request the server builds", () => {
 			return Response.json({
 				access_token: "ya29.secret-access-token",
 				refresh_token: "1//secret-refresh-token",
-				scope: `openid email ${MAIL_SCOPES.join(" ")}`,
+				scope: `openid email ${REQUIRED_SCOPES.join(" ")}`,
 				id_token: fakeIdToken(validClaims("https://x.test/?nonce=none", { sub: "9", email: "a@example.com" })),
 			});
 		});

@@ -127,6 +127,10 @@ export function DashboardPage(props: {
 					Google's consent screen will say gmux can send email. gmux never sends; it only reads and writes drafts.
 				</p>
 				<p class="note">
+					Connecting also asks for read-only access to Drive and Docs. An account connected before that was added shows
+					Needs reconnecting until you reconnect it once.
+				</p>
+				<p class="note">
 					Removing an account makes gmux forget its token. It doesn't revoke the grant at Google; do that at{" "}
 					<a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
 				</p>

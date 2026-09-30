@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAccount, MAIL_SCOPES, renameAccount } from "../src/accounts.js";
+import { getAccount, MAIL_SCOPES, REQUIRED_SCOPES, renameAccount } from "../src/accounts.js";
 import { claimOwnerIfUnclaimed } from "../src/owner.js";
 import { createSession, SESSION_COOKIE } from "../src/session.js";
 import { SIGN_IN_SCOPES } from "../src/signin.js";
@@ -19,7 +19,7 @@ import {
 } from "./helpers.js";
 
 const OTHER = { sub: "2002", email: "Work@Example.com" };
-const GRANTED = `openid email ${MAIL_SCOPES.join(" ")}`;
+const GRANTED = `openid email ${REQUIRED_SCOPES.join(" ")}`;
 
 beforeEach(async () => {
 	await seedGoogleClient();
@@ -68,7 +68,7 @@ async function callback(authUrl: URL, cookie: string | undefined, answer: Record
 }
 
 describe("starting a connect", () => {
-	it("asks for exactly the mail scopes, offline, with consent and PKCE", async () => {
+	it("asks for exactly the mail and Drive scopes, offline, with consent and PKCE", async () => {
 		const url = await startConnect(await ownerSession());
 		expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
 		expect(new Set(url.searchParams.get("scope")?.split(" "))).toEqual(
@@ -77,6 +77,7 @@ describe("starting a connect", () => {
 				"email",
 				"https://www.googleapis.com/auth/gmail.readonly",
 				"https://www.googleapis.com/auth/gmail.compose",
+				"https://www.googleapis.com/auth/drive.readonly",
 			]),
 		);
 		expect(url.searchParams.get("access_type")).toBe("offline");
@@ -159,6 +160,16 @@ describe("the callback", () => {
 		const session = await ownerSession();
 		const response = await callback(await startConnect(session), session.cookie, {
 			scope: `openid email ${MAIL_SCOPES[0]}`,
+		});
+		expect(response.status).toBe(400);
+		expect(await response.clone().text()).toContain("leave every box ticked");
+		await expectRefusedAndNothingStored(response);
+	});
+
+	it("refuses a grant that omits drive.readonly", async () => {
+		const session = await ownerSession();
+		const response = await callback(await startConnect(session), session.cookie, {
+			scope: `openid email ${MAIL_SCOPES.join(" ")}`,
 		});
 		expect(response.status).toBe(400);
 		expect(await response.clone().text()).toContain("leave every box ticked");
