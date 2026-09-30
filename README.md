@@ -4,8 +4,9 @@ A self-hosted MCP server that lets an AI assistant like Claude read across
 several Google accounts at once. It runs as your own Cloudflare Worker, and
 your Google tokens never pass through anyone else's servers.
 
-> **Status: scaffolding.** The Worker deploys, boots and serves a setup
-> page, and its `/mcp` route is locked. Google sign-in, connecting
+> **Status: scaffolding.** The Worker deploys, boots and walks you through
+> setup in the browser: your Google OAuth client, then claiming the
+> instance. Its `/mcp` route is locked to your connector. Connecting
 > accounts and the mail tools are still being built.
 
 ## Deploy
@@ -41,8 +42,10 @@ redeploy.
 | Route | What it is |
 | -- | -- |
 | `GET /` | The admin UI. Shows the setup page until setup is complete, then the claim or sign-in page, then the dashboard. |
-| `GET /style.css` | The stylesheet. |
-| `GET /signin`, `GET /signin/callback` | Google sign-in for the admin UI. The callback is the redirect URI to register with your Google OAuth client: `https://<your-worker>/signin/callback`. |
+| `GET /setup` | The setup wizard, until someone claims the instance. Walks you through creating your Google OAuth client. Redirects to `/` once claimed. |
+| `POST /setup/google-client` | Saves the Google OAuth client from the wizard. Refused once someone has claimed the instance, and from any other site. |
+| `GET /style.css`, `GET /copy.js` | The stylesheet, and the small script behind the copy buttons. |
+| `GET /signin`, `GET /signin/callback` | Google sign-in for the admin UI. The callback is the redirect URI to register with your Google OAuth client; the setup page shows it. |
 | `POST /signout` | Ends the admin session. |
 | `GET/POST /authorize` | Connector sign-in: Google sign-in if needed, then a consent page. Only the owner's approval issues a connector token. |
 | `/token`, `/register`, `/.well-known/*` | The OAuth library's own endpoints. |
@@ -64,9 +67,6 @@ every session and connector token stops working at once.
 
 Signing in to gmux asks Google for your email address only (`openid email`).
 That is a separate grant from the ones that connect your mailboxes.
-
-Until the setup wizard exists, put your Google OAuth client in `GMUX_KV` by
-hand under `config:google-client`, as `{"clientId": "...", "clientSecret": "..."}`.
 
 ## Develop
 
