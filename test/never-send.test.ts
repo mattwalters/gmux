@@ -109,7 +109,9 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
 	list_accounts: {},
 };
 
-async function mcpRpc(method: string, params: unknown): Promise<{ result: { tools?: { name: string }[] } }> {
+type McpReply = { result: { tools?: { name: string }[]; isError?: boolean; content?: { text?: string }[] } };
+
+async function mcpRpc(method: string, params: unknown): Promise<McpReply> {
 	const request = new Request("https://gmux.test/mcp", {
 		method: "POST",
 		headers: {
@@ -120,7 +122,7 @@ async function mcpRpc(method: string, params: unknown): Promise<{ result: { tool
 		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
 	});
 	const response = await mcp.fetch(request as Parameters<typeof mcp.fetch>[0], testEnv);
-	return (await readMcpJson(response)) as { result: { tools?: { name: string }[] } };
+	return (await readMcpJson(response)) as McpReply;
 }
 
 describe("every request the server builds", () => {
@@ -149,7 +151,14 @@ describe("every request the server builds", () => {
 		expect(listed.length).toBeGreaterThan(0);
 		for (const tool of listed) {
 			expect(Object.keys(TOOL_ARGS), `tool ${tool.name} needs an entry in TOOL_ARGS`).toContain(tool.name);
-			await mcpRpc("tools/call", { name: tool.name, arguments: TOOL_ARGS[tool.name] });
+			// gmailFetch refuses a send URL before fetch runs, so the request list
+			// never sees it. A refusal surfaces as a tool error instead, so every
+			// swept call must succeed, which also proves the tool really ran.
+			const called = await mcpRpc("tools/call", { name: tool.name, arguments: TOOL_ARGS[tool.name] });
+			const text = JSON.stringify(called.result?.content ?? called);
+			expect(text, `tool ${tool.name} attempted a send`).not.toContain("never sends");
+			expect(called.result, `tool ${tool.name} returned no result: ${text}`).toBeDefined();
+			expect(called.result.isError, `tool ${tool.name} failed: ${text}`).not.toBe(true);
 		}
 
 		// Sign-in and connect, up to Google's redirect and back through the callback.
@@ -187,11 +196,12 @@ const sources = import.meta.glob<string>("../src/**/*.{ts,tsx}", {
 describe("the source", () => {
 	const SEND_SPELLINGS = ["messages/send", "drafts/send", "messages:send", "drafts:send"];
 	const GMAIL_HOSTS = ["gmail.googleapis.com", "googleapis.com/gmail"];
-	const others = Object.entries(sources).filter(([path]) => !path.endsWith("/gmail.ts"));
+	const GMAIL_SRC = "../src/gmail.ts";
+	const others = Object.entries(sources).filter(([path]) => path !== GMAIL_SRC);
 
 	it("found the source files", () => {
 		expect(Object.keys(sources).length).toBeGreaterThan(10);
-		expect(Object.keys(sources).some((path) => path.endsWith("/gmail.ts"))).toBe(true);
+		expect(Object.keys(sources)).toContain(GMAIL_SRC);
 	});
 
 	it("spells no send endpoint and no Gmail host outside src/gmail.ts", () => {
@@ -203,7 +213,7 @@ describe("the source", () => {
 	});
 
 	it("keeps the send endpoints out of src/gmail.ts except inside the refusal pattern", () => {
-		const gmail = Object.entries(sources).find(([path]) => path.endsWith("/gmail.ts"))?.[1] ?? "";
+		const gmail = sources[GMAIL_SRC] ?? "";
 		for (const needle of SEND_SPELLINGS) expect(gmail.toLowerCase()).not.toContain(needle);
 		expect(gmail).toContain("(messages|drafts)[/:]send");
 	});
