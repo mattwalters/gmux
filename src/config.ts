@@ -56,11 +56,16 @@ const CLIENT_ID_SUFFIX = ".apps.googleusercontent.com";
  * Validates the setup form's client ID and secret. The messages are for the
  * person typing, and never repeat the secret.
  */
+/** Whether a trimmed string has the shape of a Google client ID. */
+export function isClientId(id: string): boolean {
+	return id.length <= MAX_FIELD_LENGTH && id.endsWith(CLIENT_ID_SUFFIX);
+}
+
 export function parseGoogleClientForm(clientId: unknown, clientSecret: unknown): GoogleClient | { error: string } {
 	const id = typeof clientId === "string" ? clientId.trim() : "";
 	const secret = typeof clientSecret === "string" ? clientSecret.trim() : "";
 	if (!id) return { error: "Enter the client ID." };
-	if (id.length > MAX_FIELD_LENGTH || !id.endsWith(CLIENT_ID_SUFFIX)) {
+	if (!isClientId(id)) {
 		return { error: `That doesn't look like a client ID. It ends with ${CLIENT_ID_SUFFIX}.` };
 	}
 	if (!secret) return { error: "Enter the client secret." };

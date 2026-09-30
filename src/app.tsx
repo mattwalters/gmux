@@ -13,7 +13,14 @@ import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { isConfigured, parseGoogleClientForm, readGoogleClient, readSetupState, writeGoogleClient } from "./config.js";
+import {
+	isClientId,
+	isConfigured,
+	parseGoogleClientForm,
+	readGoogleClient,
+	readSetupState,
+	writeGoogleClient,
+} from "./config.js";
 import type { Env } from "./env.js";
 import { describeError } from "./errors.js";
 import { MCP_SCOPE } from "./gate.js";
@@ -149,8 +156,14 @@ app.get("/setup", async (c) => (c.get("owner") ? c.redirect("/") : await renderS
 app.post("/setup/google-client", async (c) => {
 	const owner = c.get("owner");
 	if (owner) return c.html(<SetupRefusedPage owner={owner}>This gmux is already claimed.</SetupRefusedPage>, 403);
+	// Our pages send Referrer-Policy: no-referrer, so browsers put "Origin: null"
+	// on their own form posts. "null" says nothing about the source: decide on
+	// Sec-Fetch-Site instead, as for a missing Origin.
 	const origin = c.req.header("Origin");
-	const sameSite = origin ? origin === new URL(c.req.url).origin : c.req.header("Sec-Fetch-Site") === "same-origin";
+	const sameSite =
+		origin && origin !== "null"
+			? origin === new URL(c.req.url).origin
+			: c.req.header("Sec-Fetch-Site") === "same-origin";
 	if (!sameSite) {
 		return c.html(<SetupRefusedPage owner={owner}>That request didn't come from this page.</SetupRefusedPage>, 403);
 	}
@@ -160,11 +173,9 @@ app.post("/setup/google-client", async (c) => {
 	const submitted = form.get("client_id");
 	const parsed = parseGoogleClientForm(submitted, form.get("client_secret"));
 	if ("error" in parsed) {
-		return renderSetup(
-			c,
-			{ error: parsed.error, clientId: typeof submitted === "string" ? submitted.trim() : "" },
-			400,
-		);
+		// Echo only a value shaped like a client ID; anything else may be a pasted secret.
+		const echo = typeof submitted === "string" && isClientId(submitted.trim()) ? submitted.trim() : "";
+		return renderSetup(c, { error: parsed.error, clientId: echo }, 400);
 	}
 	await writeGoogleClient(c.env, parsed);
 	return c.redirect("/", 303);

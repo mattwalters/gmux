@@ -75,6 +75,47 @@ describe("setup wizard", () => {
 		expect((await callWorker(postClient(validFields, { "Sec-Fetch-Site": "same-origin" }))).status).toBe(303);
 	});
 
+	it("accepts the Origin: null a no-referrer page's own form sends, when Sec-Fetch-Site says same-origin", async () => {
+		const response = await callWorker(postClient(validFields, { Origin: "null", "Sec-Fetch-Site": "same-origin" }));
+		expect(response.status).toBe(303);
+	});
+
+	it("refuses Origin: null unless Sec-Fetch-Site says same-origin", async () => {
+		const attempts: Record<string, string>[] = [
+			{ Origin: "null" },
+			{ Origin: "null", "Sec-Fetch-Site": "cross-site" },
+			{ Origin: "null", "Sec-Fetch-Site": "none" },
+		];
+		for (const headers of attempts) {
+			expect((await callWorker(postClient(validFields, headers))).status).toBe(403);
+		}
+		expect(await storedClient()).toBeNull();
+	});
+
+	it("doesn't echo a secret pasted into the client ID field", async () => {
+		const html = await (
+			await callWorker(postClient({ client_id: "GOCSPX-pasted-secret", client_secret: "whatever" }))
+		).text();
+		expect(html).not.toContain("GOCSPX-pasted-secret");
+	});
+
+	it("doesn't offer the claim hand-off while the encryption key is missing", async () => {
+		await testEnv.GMUX_KV.put(GOOGLE_CLIENT_KEY, JSON.stringify(GOOGLE_CLIENT));
+		const html = await (await callWorker(get("/"), { ...testEnv, TOKEN_ENCRYPTION_KEY: "too-short" })).text();
+		expect(html).toContain("wrangler secret put TOKEN_ENCRYPTION_KEY");
+		expect(html).not.toContain("sign in with Google to claim this gmux");
+	});
+
+	it("shows an owned but unfinished instance no client form and no claim prompt", async () => {
+		await testEnv.GMUX_KV.put(GOOGLE_CLIENT_KEY, JSON.stringify(GOOGLE_CLIENT));
+		await claimOwnerIfUnclaimed(testEnv.GMUX_KV, OWNER);
+		const html = await (await callWorker(get("/"), { ...testEnv, TOKEN_ENCRYPTION_KEY: "too-short" })).text();
+		expect(html).toContain("wrangler secret put TOKEN_ENCRYPTION_KEY");
+		expect(html).not.toContain('action="/setup/google-client"');
+		expect(html).not.toContain("Re-enter it");
+		expect(html).not.toContain("to claim this gmux");
+	});
+
 	it.each([
 		["a bad client ID", { client_id: "nope", client_secret: "test-client-secret" }],
 		["an empty secret", { client_id: GOOGLE_CLIENT.clientId, client_secret: "  " }],

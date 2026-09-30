@@ -40,6 +40,9 @@ export function SetupPage(props: {
 	clientId?: string;
 }) {
 	const { origin, redirectUri, state } = props;
+	// Once claimed, the server refuses the client form, so the page only reports
+	// what's missing and offers nothing to submit or claim.
+	const owned = !!props.owner;
 	return (
 		<Layout title="Setup" owner={props.owner}>
 			<h1>Finish setting up gmux</h1>
@@ -72,42 +75,48 @@ export function SetupPage(props: {
 										: <code>{state.googleClientId}</code>
 									</>
 								)}
-								. Not yours? Re-enter it below.
+								.{owned ? "" : " Not yours? Re-enter it below."}
 							</>
 						) : (
 							"Not configured yet. Google needs to know about this gmux first, and it takes about five minutes."
 						)}
 					</p>
-					<h3>1. Copy this redirect URI</h3>
-					<Copyable id="redirect-uri" text={redirectUri} />
-					<h3>2. Create the client in Google Cloud Console</h3>
-					<CloudConsoleSteps redirectUri={redirectUri} />
-					<h3>3. Paste the client ID and secret</h3>
-					{props.error && (
-						<p class="error" role="alert">
-							{props.error}
-						</p>
-					)}
-					<form method="post" action="/setup/google-client" class="stack">
-						<label>
-							Client ID
-							<input type="text" name="client_id" value={props.clientId ?? ""} required autocomplete="off" />
-						</label>
-						<label>
-							Client secret
-							<input type="password" name="client_secret" required autocomplete="off" />
-						</label>
-						<div class="actions">
-							<button type="submit" class="button">
-								Save
-							</button>
-						</div>
-					</form>
-					<p class="note">No redeploy needed. gmux saves this and carries on.</p>
-					{state.googleClient && (
-						<p>
-							Next: <a href="/">sign in with Google to claim this gmux</a>.
-						</p>
+					{owned ? (
+						<p class="note">This gmux is already claimed, so the client can't be changed from this page.</p>
+					) : (
+						<>
+							<h3>1. Copy this redirect URI</h3>
+							<Copyable id="redirect-uri" text={redirectUri} />
+							<h3>2. Create the client in Google Cloud Console</h3>
+							<CloudConsoleSteps redirectUri={redirectUri} />
+							<h3>3. Paste the client ID and secret</h3>
+							{props.error && (
+								<p class="error" role="alert">
+									{props.error}
+								</p>
+							)}
+							<form method="post" action="/setup/google-client" class="stack">
+								<label>
+									Client ID
+									<input type="text" name="client_id" value={props.clientId ?? ""} required autocomplete="off" />
+								</label>
+								<label>
+									Client secret
+									<input type="password" name="client_secret" required autocomplete="off" />
+								</label>
+								<div class="actions">
+									<button type="submit" class="button">
+										Save
+									</button>
+								</div>
+							</form>
+							<p class="note">No redeploy needed. gmux saves this and carries on.</p>
+							{state.googleClient && state.encryptionKey && (
+								<p>
+									Next: <a href="/">sign in with Google to claim this gmux</a>.
+								</p>
+							)}
+						</>
 					)}
 				</Step>
 			</ol>
