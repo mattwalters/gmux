@@ -16,6 +16,9 @@ export function ClaimPage(props: { owner: OwnerView }) {
 				</a>
 			</p>
 			<p class="note">Google will only be asked for your email address.</p>
+			<p class="note">
+				Entered the wrong Google client? <a href="/setup">Change it</a>.
+			</p>
 		</Layout>
 	);
 }

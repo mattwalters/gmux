@@ -26,6 +26,7 @@ export function Layout(props: { title: string; owner: OwnerView; signOutCsrf?: s
 					<meta name="robots" content="noindex" />
 					<title>{`${props.title} · gmux`}</title>
 					<link rel="stylesheet" href="/style.css" />
+					<script src="/copy.js" defer />
 				</head>
 				<body>
 					<header class="site">

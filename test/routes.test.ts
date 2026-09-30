@@ -1,10 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { GOOGLE_CLIENT_KEY } from "../src/config.js";
-import { BASE_URL, callWorker, get, testEnv, unconfiguredEnv } from "./helpers.js";
+import { GOOGLE_CLIENT_KEY, readGoogleClient } from "../src/config.js";
+import { claimOwnerIfUnclaimed } from "../src/owner.js";
+import { createSession, SESSION_COOKIE } from "../src/session.js";
+import { BASE_URL, callWorker, GOOGLE_CLIENT, get, OWNER, resetKv, testEnv, unconfiguredEnv } from "./helpers.js";
 
-afterEach(async () => {
-	await testEnv.GMUX_KV.delete(GOOGLE_CLIENT_KEY);
-});
+afterEach(resetKv);
+
+function postClient(fields: Record<string, string>, headers: Record<string, string> = { Origin: BASE_URL }) {
+	return get("/setup/google-client", { method: "POST", headers, body: new URLSearchParams(fields) });
+}
+
+const validFields = { client_id: GOOGLE_CLIENT.clientId, client_secret: GOOGLE_CLIENT.clientSecret };
+
+async function storedClient(): Promise<string | null> {
+	return testEnv.GMUX_KV.get(GOOGLE_CLIENT_KEY);
+}
 
 describe("boots unconfigured", () => {
 	it("serves the setup page, not an error, with no secrets and no Google client", async () => {
@@ -40,6 +50,101 @@ describe("boots unconfigured", () => {
 	it("never renders the encryption key's value", async () => {
 		const html = await (await callWorker(get("/"))).text();
 		expect(html).not.toContain(testEnv.TOKEN_ENCRYPTION_KEY as string);
+	});
+});
+
+describe("setup wizard", () => {
+	it("shows the redirect URI, a copy button, the console link and the form on a fresh deploy", async () => {
+		const html = await (await callWorker(get("/"), unconfiguredEnv())).text();
+		expect(html).toContain(`${BASE_URL}/signin/callback`);
+		expect(html).toContain("data-copy");
+		expect(html).toContain("console.cloud.google.com");
+		expect(html).toContain('action="/setup/google-client"');
+	});
+
+	it("saves a valid client from the same origin, then moves on to claiming", async () => {
+		const response = await callWorker(postClient(validFields));
+		expect(response.status).toBe(303);
+		expect(response.headers.get("Location")).toBe("/");
+		expect(await readGoogleClient(testEnv)).toEqual(GOOGLE_CLIENT);
+		expect(JSON.parse((await storedClient()) as string)).toEqual(GOOGLE_CLIENT);
+		expect(await (await callWorker(get("/"))).text()).toContain("Sign in with Google to claim this gmux");
+	});
+
+	it("accepts a missing Origin only when the browser says same-origin", async () => {
+		expect((await callWorker(postClient(validFields, { "Sec-Fetch-Site": "same-origin" }))).status).toBe(303);
+	});
+
+	it.each([
+		["a bad client ID", { client_id: "nope", client_secret: "test-client-secret" }],
+		["an empty secret", { client_id: GOOGLE_CLIENT.clientId, client_secret: "  " }],
+		["a secret with a space", { client_id: GOOGLE_CLIENT.clientId, client_secret: "has space" }],
+	])("rejects %s with 400 and stores nothing", async (_name, fields) => {
+		const response = await callWorker(postClient(fields));
+		expect(response.status).toBe(400);
+		const html = await response.text();
+		expect(html).not.toContain(fields.client_secret.trim() || "\0");
+		expect(html).not.toContain("test-client-secret");
+		expect(await storedClient()).toBeNull();
+	});
+
+	it("re-fills the client ID, never the secret, after a rejection", async () => {
+		const html = await (await callWorker(postClient({ client_id: GOOGLE_CLIENT.clientId, client_secret: "" }))).text();
+		expect(html).toContain(GOOGLE_CLIENT.clientId);
+		expect(html).toContain("Enter the client secret.");
+	});
+
+	it("refuses a cross-site request", async () => {
+		expect((await callWorker(postClient(validFields, { Origin: "https://evil.test" }))).status).toBe(403);
+		expect((await callWorker(postClient(validFields, { "Sec-Fetch-Site": "cross-site" }))).status).toBe(403);
+		expect((await callWorker(postClient(validFields, {}))).status).toBe(403);
+		expect(await storedClient()).toBeNull();
+	});
+
+	it("refuses once an owner exists, and sends /setup back home", async () => {
+		await claimOwnerIfUnclaimed(testEnv.GMUX_KV, OWNER);
+		expect((await callWorker(postClient(validFields))).status).toBe(403);
+		expect(await storedClient()).toBeNull();
+		const response = await callWorker(get("/setup"));
+		expect(response.status).toBe(302);
+		expect(response.headers.get("Location")).toBe("/");
+	});
+
+	it("lets a deployer re-enter the client before anyone claims", async () => {
+		await callWorker(postClient(validFields));
+		const html = await (await callWorker(get("/setup"))).text();
+		expect(html).toContain('action="/setup/google-client"');
+		expect(html).toContain(GOOGLE_CLIENT.clientId);
+		const other = { client_id: "other.apps.googleusercontent.com", client_secret: "other-secret" };
+		expect((await callWorker(postClient(other))).status).toBe(303);
+		expect(await readGoogleClient(testEnv)).toEqual({ clientId: other.client_id, clientSecret: other.client_secret });
+	});
+
+	it("never renders the client secret, before or after saving", async () => {
+		await callWorker(postClient(validFields));
+		for (const path of ["/", "/setup"]) {
+			expect(await (await callWorker(get(path))).text()).not.toContain(GOOGLE_CLIENT.clientSecret);
+		}
+	});
+
+	it("serves the copy script, and its CSP allows only same-origin scripts", async () => {
+		const script = await callWorker(get("/copy.js"), unconfiguredEnv());
+		expect(script.status).toBe(200);
+		expect(script.headers.get("Content-Type")).toContain("text/javascript");
+		const policy = (await callWorker(get("/setup"), unconfiguredEnv())).headers.get("Content-Security-Policy");
+		expect(policy).toContain("script-src 'self'");
+		expect(policy).toContain("default-src 'none'");
+	});
+
+	it("shows the signed-in owner the connection string", async () => {
+		await testEnv.GMUX_KV.put(GOOGLE_CLIENT_KEY, JSON.stringify(GOOGLE_CLIENT));
+		await claimOwnerIfUnclaimed(testEnv.GMUX_KV, OWNER);
+		const { id } = await createSession(testEnv.GMUX_KV, OWNER);
+		const response = await callWorker(get("/", { headers: { Cookie: `${SESSION_COOKIE}=${id}` } }));
+		const html = await response.text();
+		expect(html).toContain(`${BASE_URL}/mcp`);
+		expect(html).toContain("Add custom connector");
+		expect(html).not.toContain(GOOGLE_CLIENT.clientSecret);
 	});
 });
 

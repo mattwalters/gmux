@@ -13,7 +13,7 @@ import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { isConfigured, readGoogleClient, readSetupState } from "./config.js";
+import { isConfigured, parseGoogleClientForm, readGoogleClient, readSetupState, writeGoogleClient } from "./config.js";
 import type { Env } from "./env.js";
 import { describeError } from "./errors.js";
 import { MCP_SCOPE } from "./gate.js";
@@ -28,9 +28,10 @@ import {
 	SESSION_TTL_SECONDS,
 	type Session,
 } from "./session.js";
-import { startSignIn, takePending, verifyCallback } from "./signin.js";
+import { googleRedirectUri, startSignIn, takePending, verifyCallback } from "./signin.js";
 import styles from "./style.css";
-import { DashboardPage, NotFoundPage, SetupPage } from "./views/setup.js";
+import { COPY_SCRIPT } from "./views/copy-script.js";
+import { DashboardPage, NotFoundPage, SetupPage, SetupRefusedPage } from "./views/setup.js";
 import {
 	BadConnectorRequestPage,
 	ClaimedPage,
@@ -51,7 +52,7 @@ const CSP_HEADER = "Content-Security-Policy";
 const CONSENT_TTL_SECONDS = 600;
 
 function csp(formAction: string): string {
-	return `default-src 'none'; style-src 'self'; form-action ${formAction}; frame-ancestors 'none'`;
+	return `default-src 'none'; script-src 'self'; style-src 'self'; form-action ${formAction}; frame-ancestors 'none'`;
 }
 
 app.use(async (c, next) => {
@@ -112,14 +113,67 @@ async function renderConsent(c: AppContext, session: Session, oauthReqInfo: Auth
 	);
 }
 
+async function renderSetup(c: AppContext, form: { error?: string; clientId?: string } = {}, status: 200 | 400 = 200) {
+	const origin = new URL(c.req.url).origin;
+	const state = await readSetupState(c.env);
+	return c.html(
+		<SetupPage
+			owner={c.get("owner")}
+			origin={origin}
+			redirectUri={googleRedirectUri(origin)}
+			state={state}
+			error={form.error}
+			clientId={form.clientId ?? state.googleClientId}
+		/>,
+		status,
+	);
+}
+
 app.get("/", async (c) => {
 	const owner = c.get("owner");
 	const state = await readSetupState(c.env);
-	if (!isConfigured(state)) return c.html(<SetupPage owner={owner} origin={new URL(c.req.url).origin} state={state} />);
+	if (!isConfigured(state)) return renderSetup(c);
 	if (!owner) return c.html(<ClaimPage owner={owner} />);
 	const session = await currentSession(c);
 	if (!session) return c.html(<SignInPage owner={owner} />);
-	return c.html(<DashboardPage owner={owner} signOutCsrf={session.csrf} />);
+	return c.html(<DashboardPage owner={owner} signOutCsrf={session.csrf} origin={new URL(c.req.url).origin} />);
+});
+
+// The setup wizard, until somebody claims the instance. Editing the client
+// after that belongs to the dashboard.
+app.get("/setup", async (c) => (c.get("owner") ? c.redirect("/") : await renderSetup(c)));
+
+// Unauthenticated by necessity: nobody can sign in before a client exists. So,
+// like the owner claim, it's trust-on-first-use: closed once an owner exists,
+// and only accepted from this site's own pages. On the stop-list (AGENTS.md).
+app.post("/setup/google-client", async (c) => {
+	const owner = c.get("owner");
+	if (owner) return c.html(<SetupRefusedPage owner={owner}>This gmux is already claimed.</SetupRefusedPage>, 403);
+	const origin = c.req.header("Origin");
+	const sameSite = origin ? origin === new URL(c.req.url).origin : c.req.header("Sec-Fetch-Site") === "same-origin";
+	if (!sameSite) {
+		return c.html(<SetupRefusedPage owner={owner}>That request didn't come from this page.</SetupRefusedPage>, 403);
+	}
+
+	// A body that isn't a form reads as an empty one.
+	const form = await c.req.formData().catch(() => new FormData());
+	const submitted = form.get("client_id");
+	const parsed = parseGoogleClientForm(submitted, form.get("client_secret"));
+	if ("error" in parsed) {
+		return renderSetup(
+			c,
+			{ error: parsed.error, clientId: typeof submitted === "string" ? submitted.trim() : "" },
+			400,
+		);
+	}
+	await writeGoogleClient(c.env, parsed);
+	return c.redirect("/", 303);
+});
+
+app.get("/copy.js", (c) => {
+	c.header("Content-Type", "text/javascript; charset=utf-8");
+	c.header("Cache-Control", "public, max-age=300");
+	return c.body(COPY_SCRIPT);
 });
 
 app.get("/style.css", (c) => {
