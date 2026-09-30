@@ -112,8 +112,9 @@ export async function renameAccount(
 
 /** Forgets the account and its stored token. Doesn't revoke anything at Google. */
 export async function removeAccount(kv: KVNamespace, email: string): Promise<void> {
-	await kv.delete(accountKey(email));
+	// Token first: if this throws, the account stays listed and Remove can be retried.
 	await deleteRefreshToken(kv, normalizeEmail(email));
+	await kv.delete(accountKey(email));
 }
 
 export type AccountHealth = { state: "ok" } | { state: ErrorCode; sentence: string };
