@@ -1,10 +1,11 @@
 // Calls src/mcp.ts directly, behind the gate: test/routes.test.ts covers the
 // gate itself, and test/signin.test.ts covers minting a token.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAIL_SCOPES } from "../src/accounts.js";
 import type { Env } from "../src/env.js";
 import mcp from "../src/mcp.js";
-import { readMcpJson, testEnv, unconfiguredEnv } from "./helpers.js";
+import { readMcpJson, resetKv, seedAccount, seedGoogleClient, testEnv, unconfiguredEnv } from "./helpers.js";
 
 async function rpc(method: string, params: unknown, env: Partial<Env> = testEnv): Promise<unknown> {
 	const request = new Request("https://gmux.test/mcp", {
@@ -21,11 +22,77 @@ async function rpc(method: string, params: unknown, env: Partial<Env> = testEnv)
 	return readMcpJson(response);
 }
 
+type ToolResult = { result: { isError?: boolean; content: { text: string }[] } };
+
+async function listAccounts(env: Partial<Env> = testEnv): Promise<{ isError?: boolean; text: string }> {
+	const { result } = (await rpc("tools/call", { name: "list_accounts", arguments: {} }, env)) as ToolResult;
+	return { isError: result.isError, text: result.content[0].text };
+}
+
+function mockTokenEndpoint(scope: string) {
+	return vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+		const refreshToken = new URLSearchParams(init?.body as URLSearchParams).get("refresh_token");
+		return refreshToken === "1//revoked-refresh"
+			? Response.json({ error: "invalid_grant" }, { status: 400 })
+			: Response.json({ access_token: "ya29.secret-access-token", scope });
+	});
+}
+
+const BOTH_SCOPES = MAIL_SCOPES.join(" ");
+
+afterEach(async () => {
+	vi.restoreAllMocks();
+	await resetKv();
+});
+
 describe("MCP tools", () => {
-	it("lists the health check as the only tool, read-only", async () => {
+	it("lists health_check and list_accounts, both read-only", async () => {
 		const result = (await rpc("tools/list", {})) as { result: { tools: { name: string; annotations: unknown }[] } };
-		expect(result.result.tools.map((tool) => tool.name)).toEqual(["health_check"]);
-		expect(result.result.tools[0].annotations).toMatchObject({ readOnlyHint: true });
+		expect(result.result.tools.map((tool) => tool.name)).toEqual(["health_check", "list_accounts"]);
+		for (const tool of result.result.tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true });
+	});
+
+	it("list_accounts names the unreachable account first and leaks no token", async () => {
+		await seedGoogleClient();
+		await seedAccount("work@example.com", "1//ok-refresh");
+		await seedAccount("gone@example.com", "1//revoked-refresh");
+		mockTokenEndpoint(BOTH_SCOPES);
+		const { text, isError } = await listAccounts();
+		const lines = text.split("\n");
+		expect(isError).toBeUndefined();
+		expect(lines[0]).toBe("Partial result: 1 of 2 accounts could not be reached.");
+		expect(lines[1]).toContain("gone@example.com: reauth_required");
+		expect(lines[1]).toContain("Reconnect it from the gmux admin page, or remove it there.");
+		expect(text.indexOf("work@example.com: connected")).toBeGreaterThan(text.indexOf("gone@example.com"));
+		for (const secret of ["ya29.secret-access-token", "1//ok-refresh", "1//revoked-refresh"]) {
+			expect(text).not.toContain(secret);
+		}
+	});
+
+	it("list_accounts reports a grant missing gmail.compose as needing reconnecting", async () => {
+		await seedGoogleClient();
+		await seedAccount("work@example.com", "1//ok-refresh");
+		mockTokenEndpoint(MAIL_SCOPES[0]);
+		const { text, isError } = await listAccounts();
+		expect(isError).toBe(true);
+		expect(text).toContain("reauth_required: work@example.com");
+		expect(text).not.toContain(": connected");
+	});
+
+	it("list_accounts is one misconfigured error without a Google client, and never calls Google", async () => {
+		await seedAccount("work@example.com", "1//ok-refresh");
+		const fetchSpy = vi.spyOn(globalThis, "fetch");
+		const { text, isError } = await listAccounts();
+		expect(isError).toBe(true);
+		expect(text.split("\n")[0]).toMatch(/^misconfigured:/);
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("list_accounts with no accounts is an error saying so", async () => {
+		await seedGoogleClient();
+		const { text, isError } = await listAccounts();
+		expect(isError).toBe(true);
+		expect(text).toContain("No Google accounts are connected");
 	});
 
 	it("health_check reports what's configured", async () => {

@@ -52,7 +52,10 @@ redeploy.
 | `/token`, `/register`, `/.well-known/*` | The OAuth library's own endpoints. |
 | `/mcp` and below | The MCP server. Needs a valid connector token; without one it returns `401`. |
 
-The only MCP tool so far is `health_check`.
+The MCP tools so far:
+
+- `health_check`: confirms gmux is reachable and which parts of setup are done.
+- `list_accounts`: lists every connected Google account and whether gmux can reach it right now. A response that couldn't reach every account says so in its first lines.
 
 ## Who owns your gmux
 
