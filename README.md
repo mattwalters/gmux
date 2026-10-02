@@ -56,6 +56,8 @@ The MCP tools so far:
 
 - `health_check`: confirms gmux is reachable and which parts of setup are done.
 - `list_accounts`: lists every connected Google account and whether gmux can reach it right now. A response that couldn't reach every account says so in its first lines.
+- `drive_search`: searches Drive across every connected account (or one), shared drives included. Read-only.
+- `drive_read_file`: one file's metadata and content from one account. Docs come back as markdown, Sheets as CSV of the first sheet, Slides as plain text. Read-only.
 
 ## Who owns your gmux
 
@@ -82,7 +84,12 @@ to repair one, **Rename** to change its label (the email by default) and
 doesn't revoke the grant at Google, which you do at
 [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 
-Connecting asks Google for `gmail.readonly` and `gmail.compose`. **Google's
+Connecting asks Google for `gmail.readonly` and `gmail.compose`, and for
+`drive.readonly` (read-only Drive and Docs). Accounts connected before Drive
+was added show Needs reconnecting until you reconnect them once; mail keeps
+working for them in the meantime, and a Drive search names them at the top of
+its result. The Drive API and the Docs API must be enabled in your Google
+Cloud project. **Google's
 consent screen will say gmux can send email. gmux never sends; it only reads
 and writes drafts.** Leave every box on that screen ticked, or gmux refuses
 the account.

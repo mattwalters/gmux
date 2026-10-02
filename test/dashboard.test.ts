@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAIL_SCOPES, renameAccount, saveAccount } from "../src/accounts.js";
+import { REQUIRED_SCOPES, renameAccount, saveAccount } from "../src/accounts.js";
 import { GOOGLE_TOKEN_URL } from "../src/google.js";
 import { claimOwnerIfUnclaimed } from "../src/owner.js";
 import { createSession, SESSION_COOKIE } from "../src/session.js";
@@ -29,7 +29,7 @@ async function seedAccount(email: string, refreshToken: string) {
 	await writeRefreshToken(KV, testEnv.TOKEN_ENCRYPTION_KEY as string, email, {
 		refreshToken,
 		email,
-		scopes: [...MAIL_SCOPES],
+		scopes: [...REQUIRED_SCOPES],
 		connectedAt: WHEN,
 	});
 	await saveAccount(KV, { email, sub: email, connectedAt: WHEN });

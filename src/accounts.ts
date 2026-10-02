@@ -4,7 +4,8 @@
 // `refresh:<email>`, and the lower-cased email is the account name everywhere
 // (token store, error classes, dashboard).
 //
-// On the stop-list (AGENTS.md): MAIL_SCOPES is the mailbox grant's scope list.
+// On the stop-list (AGENTS.md): MAIL_SCOPES, DRIVE_SCOPES and REQUIRED_SCOPES are
+// the connect grant's scope list.
 
 import type { Env } from "./env.js";
 import { describeError, type ErrorCode, MisconfiguredError, ReauthRequiredError } from "./errors.js";
@@ -20,6 +21,15 @@ export const MAIL_SCOPES = [
 	"https://www.googleapis.com/auth/gmail.readonly",
 	"https://www.googleapis.com/auth/gmail.compose",
 ] as const;
+
+/**
+ * The Drive grant. drive.readonly covers Drive file listing, metadata and
+ * content, and the Docs API's documents.get. Write scopes wait for a write ticket.
+ */
+export const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"] as const;
+
+/** Every scope a fully connected account carries. Connect requires all of them. */
+export const REQUIRED_SCOPES = [...MAIL_SCOPES, ...DRIVE_SCOPES] as const;
 
 export const LABEL_MAX_LENGTH = 64;
 const PREFIX = "account:";
@@ -120,18 +130,30 @@ export async function removeAccount(kv: KVNamespace, email: string): Promise<voi
 export type AccountHealth = { state: "ok" } | { state: ErrorCode; sentence: string };
 
 /**
- * Refreshes the account's grant and checks it still carries every mail scope.
- * Throws one of the error classes when it doesn't work; the access token never
- * leaves this function.
+ * Refreshes the account's grant and returns the access token, after checking
+ * it carries every scope in `scopes`. A tool passes only its own service's
+ * scopes, so a grant missing Drive doesn't break mail. Throws one of the
+ * error classes when it doesn't work.
  */
+export async function hasScopes(
+	env: Env,
+	client: GoogleClient,
+	email: string,
+	scopes: readonly string[],
+): Promise<string> {
+	const { accessToken, scopes: granted } = await getAccessToken(env, client, email);
+	if (!scopes.every((scope) => granted.includes(scope))) throw new ReauthRequiredError(email, "missing_scopes");
+	return accessToken;
+}
+
+/** Refreshes the account's grant and checks it still carries every required scope. The access token is discarded. */
 export async function checkAccount(env: Env, client: GoogleClient, email: string): Promise<void> {
-	const { scopes } = await getAccessToken(env, client, email);
-	if (!MAIL_SCOPES.every((scope) => scopes.includes(scope))) throw new ReauthRequiredError(email, "missing_scopes");
+	await hasScopes(env, client, email, REQUIRED_SCOPES);
 }
 
 /**
  * Whether the account's grant still works right now, by refreshing it. A
- * grant that no longer carries every mail scope counts as needing a
+ * grant that no longer carries every required scope counts as needing a
  * reconnect. Anything that isn't one of the three error classes is a bug and
  * is rethrown.
  */

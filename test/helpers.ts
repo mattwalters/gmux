@@ -1,5 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { MAIL_SCOPES, saveAccount } from "../src/accounts.js";
+import { REQUIRED_SCOPES, saveAccount } from "../src/accounts.js";
 import worker, { type Env } from "../src/index.js";
 import { writeRefreshToken } from "../src/token-store.js";
 
@@ -56,7 +56,7 @@ export async function seedGoogleClient(): Promise<void> {
 }
 
 /** A connected account: a stored refresh token plus its registry record. */
-export async function seedAccount(email: string, refreshToken: string, scopes: string[] = [...MAIL_SCOPES]) {
+export async function seedAccount(email: string, refreshToken: string, scopes: string[] = [...REQUIRED_SCOPES]) {
 	const connectedAt = "2026-01-01T00:00:00.000Z";
 	await writeRefreshToken(testEnv.GMUX_KV, testEnv.TOKEN_ENCRYPTION_KEY as string, email, {
 		refreshToken,

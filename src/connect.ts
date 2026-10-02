@@ -1,14 +1,14 @@
-// The mailbox grant: connecting one Google account's mail to gmux. A different
+// The connect grant: connecting one Google account (mail and Drive) to gmux. A different
 // grant from the gate's sign-in (src/signin.ts, `openid email` only), with its
 // own pending-state prefix (`connect:<state>`), its own scope list and its own
 // handler. It shares only the redirect URI, because that's the one address
 // deployers registered in Google Cloud Console. This file calls no Gmail API.
 //
-// On the stop-list (AGENTS.md): the scope list (MAIL_SCOPES, in
+// On the stop-list (AGENTS.md): the scope list (REQUIRED_SCOPES, in
 // src/accounts.ts, plus `openid email` here), and the dispatch from
 // /signin/callback that reaches it.
 
-import { MAIL_SCOPES, normalizeEmail, saveAccount } from "./accounts.js";
+import { normalizeEmail, REQUIRED_SCOPES, saveAccount } from "./accounts.js";
 import { readEncryptionKey } from "./config.js";
 import type { Env } from "./env.js";
 import { UpstreamUnavailableError } from "./errors.js";
@@ -17,8 +17,8 @@ import { base64url, randomToken, type Session } from "./session.js";
 import { exchangeCode, GOOGLE_AUTH_URL, googleRedirectUri, identityFromIdToken } from "./signin.js";
 import { writeRefreshToken } from "./token-store.js";
 
-/** `openid email` only says which account was connected; the rest is what gmux reads and drafts with. */
-export const CONNECT_SCOPES = ["openid", "email", ...MAIL_SCOPES] as const;
+/** `openid email` only says which account was connected; the rest is what gmux reads (mail, Drive) and drafts with. */
+export const CONNECT_SCOPES = ["openid", "email", ...REQUIRED_SCOPES] as const;
 const CONNECT_TTL_SECONDS = 600;
 const LABEL = "Google account connect";
 
@@ -105,7 +105,7 @@ export async function finishConnect(
 
 	// Google's granular consent lets the user untick boxes.
 	const granted = typeof body.scope === "string" ? body.scope.split(/\s+/).filter(Boolean) : [];
-	if (!MAIL_SCOPES.every((scope) => granted.includes(scope))) return { kind: "missing_scopes" };
+	if (!REQUIRED_SCOPES.every((scope) => granted.includes(scope))) return { kind: "missing_scopes" };
 
 	const refreshToken = body.refresh_token;
 	if (typeof refreshToken !== "string" || refreshToken.length === 0) return { kind: "failed" };
