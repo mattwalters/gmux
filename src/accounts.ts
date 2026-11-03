@@ -127,6 +127,30 @@ export async function removeAccount(kv: KVNamespace, email: string): Promise<voi
 	await kv.delete(accountKey(email));
 }
 
+export type ResolvedAccount = { ok: true; account: Account } | { ok: false; message: string };
+
+/**
+ * The connected account a tool's `account` argument names: an exact email
+ * (any case), otherwise a label (trimmed, any case). A label shared by several
+ * accounts is ambiguous and is never guessed at; the message names each email.
+ */
+export async function resolveAccount(kv: KVNamespace, name: string): Promise<ResolvedAccount> {
+	const byEmail = await getAccount(kv, name);
+	if (byEmail) return { ok: true, account: byEmail };
+
+	const wanted = name.trim().toLowerCase();
+	const matches = (await listAccounts(kv)).filter((account) => account.label.trim().toLowerCase() === wanted);
+	if (matches.length === 1) return { ok: true, account: matches[0] };
+	if (matches.length > 1) {
+		const emails = matches.map((account) => account.email).join(", ");
+		return {
+			ok: false,
+			message: `More than one connected account is labelled "${name.trim()}" (${emails}). Use the email instead.`,
+		};
+	}
+	return { ok: false, message: `No connected account named ${normalizeEmail(name)}.` };
+}
+
 export type AccountHealth = { state: "ok" } | { state: ErrorCode; sentence: string };
 
 /**

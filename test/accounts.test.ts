@@ -7,6 +7,7 @@ import {
 	REQUIRED_SCOPES,
 	removeAccount,
 	renameAccount,
+	resolveAccount,
 	saveAccount,
 } from "../src/accounts.js";
 import { writeRefreshToken } from "../src/token-store.js";
@@ -79,6 +80,55 @@ describe("registry", () => {
 		await removeAccount(KV, "A@example.com");
 		expect(await KV.get("account:a@example.com")).toBeNull();
 		expect(await KV.get("refresh:a@example.com")).toBeNull();
+	});
+});
+
+describe("resolveAccount", () => {
+	async function seed() {
+		await saveAccount(KV, { email: "work@example.com", sub: "1", connectedAt: WHEN });
+		await saveAccount(KV, { email: "home@example.com", sub: "2", connectedAt: WHEN });
+		await renameAccount(KV, "work@example.com", "Work");
+		await renameAccount(KV, "home@example.com", "Home");
+	}
+
+	it("finds an account by email, in any case", async () => {
+		await seed();
+		expect(await resolveAccount(KV, " WORK@Example.com ")).toMatchObject({
+			ok: true,
+			account: { email: "work@example.com" },
+		});
+	});
+
+	it("finds an account by label, trimmed and in any case", async () => {
+		await seed();
+		expect(await resolveAccount(KV, "  hOmE ")).toMatchObject({ ok: true, account: { email: "home@example.com" } });
+	});
+
+	it("lets an exact email win over another account's label", async () => {
+		await seed();
+		await renameAccount(KV, "home@example.com", "work@example.com");
+		expect(await resolveAccount(KV, "work@example.com")).toMatchObject({
+			ok: true,
+			account: { email: "work@example.com" },
+		});
+	});
+
+	it("refuses a label that two accounts share, naming each email", async () => {
+		await seed();
+		await renameAccount(KV, "home@example.com", "work");
+		const resolved = await resolveAccount(KV, "WORK");
+		expect(resolved).toMatchObject({ ok: false });
+		const message = (resolved as { message: string }).message;
+		expect(message).toContain("home@example.com");
+		expect(message).toContain("work@example.com");
+	});
+
+	it("says no account is named that", async () => {
+		await seed();
+		expect(await resolveAccount(KV, "Nobody@Example.com")).toEqual({
+			ok: false,
+			message: "No connected account named nobody@example.com.",
+		});
 	});
 });
 
