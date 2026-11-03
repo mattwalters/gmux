@@ -113,6 +113,9 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
 	list_accounts: {},
 	drive_search: { query: "budget" },
 	drive_read_file: { account: "work@example.com", file_id: "file-1" },
+	mail_search: { query: "budget" },
+	mail_read_message: { account: "work@example.com", id: "18c3f2a" },
+	mail_read_thread: { account: "work@example.com", id: "18c3f2a" },
 };
 
 type McpReply = { result: { tools?: { name: string }[]; isError?: boolean; content?: { text?: string }[] } };

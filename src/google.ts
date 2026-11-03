@@ -102,6 +102,15 @@ function errorReasons(body: unknown): string[] {
 		.filter((reason): reason is string => typeof reason === "string");
 }
 
+/** The `reason` strings in a response's error body. Reads a clone, so apiError can still read the response; never throws. */
+export async function errorReasonsOf(response: Response): Promise<string[]> {
+	try {
+		return errorReasons(await response.clone().json());
+	} catch {
+		return [];
+	}
+}
+
 const FILE_REFUSALS = ["exportSizeLimitExceeded", "cannotDownloadFile", "fileNotDownloadable", "cannotExportFile"];
 
 /**
@@ -119,7 +128,7 @@ export async function fileRefusal(response: Response): Promise<string | undefine
 }
 
 /**
- * Maps a non-2xx response from a Google API (Drive, Docs; later Gmail) to one
+ * Maps a non-2xx response from a Google API (Drive, Docs, Gmail) to one
  * of the three classes, for the caller to throw. `api` is the name shown when
  * the API isn't enabled in the deployer's Cloud project. Never echoes a token.
  *

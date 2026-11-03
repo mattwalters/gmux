@@ -4,10 +4,11 @@ A self-hosted MCP server that lets an AI assistant like Claude read across
 several Google accounts at once. It runs as your own Cloudflare Worker, and
 your Google tokens never pass through anyone else's servers.
 
-> **Status: scaffolding.** The Worker deploys, boots and walks you through
-> setup in the browser: your Google OAuth client, then claiming the
-> instance. Its `/mcp` route is locked to your connector. Connecting
-> accounts and the mail tools are still being built.
+> **Status: early.** The Worker deploys, boots and walks you through setup
+> in the browser: your Google OAuth client, then claiming the instance. Its
+> `/mcp` route is locked to your connector. You can connect several Google
+> accounts, and the MCP tools read across them: mail search and reading,
+> and Drive and Docs. Writing drafts is the next step; gmux never sends.
 
 ## Deploy
 
@@ -58,6 +59,12 @@ The MCP tools so far:
 - `list_accounts`: lists every connected Google account and whether gmux can reach it right now. A response that couldn't reach every account says so in its first lines.
 - `drive_search`: searches Drive across every connected account (or one), shared drives included. Read-only.
 - `drive_read_file`: one file's metadata and content from one account. Docs come back as markdown, Sheets as CSV of the first sheet, Slides as plain text. Read-only.
+- `mail_search`: searches Gmail across every connected account (or one), using Gmail's own search syntax as given. Each result says which account it came from, and a search that returned the most it could says more results exist. Read-only.
+- `mail_read_message`: one message from one account: the headers that matter, the body as plain text with quoted replies and signatures removed, and the attachment names and sizes. Attachments are listed, never downloaded. Read-only.
+- `mail_read_thread`: one thread from one account, oldest message first, each cleaned the same way. Read-only.
+
+Wherever a tool takes `account`, it takes a connected account's email or its
+label (as shown on the dashboard); leaving it out means every account.
 
 ## Who owns your gmux
 
